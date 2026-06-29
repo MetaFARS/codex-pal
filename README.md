@@ -135,3 +135,29 @@ cargo test
 cargo fmt --check
 maturin build
 ```
+
+## Release
+
+Releases are tag-driven from GitHub Actions.
+
+One-time setup:
+
+1. Create a GitHub environment named `release`.
+2. Add an environment secret named `CARGO_REGISTRY_TOKEN` with a crates.io API token.
+3. On PyPI, create a pending Trusted Publisher for:
+   - project: `codex-pal`
+   - owner: `MetaFARS`
+   - repository: `codex-pal`
+   - workflow: `release.yml`
+   - environment: `release`
+
+Publish:
+
+```bash
+git tag v0.1.0
+git push origin v0.1.0
+```
+
+The release workflow builds all wheels and the sdist, publishes to PyPI via
+Trusted Publishing, publishes the Rust crate to crates.io, and creates a
+GitHub Release with the built artifacts.
