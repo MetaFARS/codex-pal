@@ -30,22 +30,68 @@ pipx install codex-pal
 
 ## Usage
 
+`codex-pal` has two interfaces:
+
+- a complete, explicit interface for scripts and debugging;
+- a profile interface for humans.
+
+### Human-friendly profiles
+
 ```bash
 export DEEPSEEK_API_KEY=...
-codex-pal --provider deepseek --model deepseek-chat
+codex-pal deepseek
 
 export DASHSCOPE_API_KEY=...
-codex-pal --provider qwen --model qwen-plus
+codex-pal qwen
 
 export OPENROUTER_API_KEY=...
-codex-pal --provider openrouter --model moonshotai/kimi-k2.7-code
+codex-pal openrouter
 ```
 
-Custom OpenAI-compatible upstream:
+The first run creates a profile under `~/.config/codex-pal/config.toml` when
+the profile name matches a built-in provider. Later runs reuse it.
+
+Configure or modify a profile:
+
+```bash
+codex-pal deepseek config --model deepseek-reasoner --port 4555
+codex-pal deepseek show
+codex-pal profiles
+codex-pal providers
+codex-pal deepseek status
+codex-pal deepseek stop
+codex-pal deepseek restart
+```
+
+Custom profile:
 
 ```bash
 export EXAMPLE_API_KEY=...
-codex-pal \
+codex-pal work-llm config \
+  --provider custom \
+  --upstream https://llm.example.com/v1 \
+  --api-key-env EXAMPLE_API_KEY \
+  --model vendor/model
+codex-pal work-llm
+```
+
+### Complete explicit interface
+
+Use `run` when every setting should be supplied by arguments:
+
+```bash
+codex-pal run \
+  --provider deepseek \
+  --model deepseek-chat \
+  --port 4444 \
+  --approval never \
+  --sandbox workspace-write
+```
+
+Custom one-shot launch:
+
+```bash
+codex-pal run \
   --provider custom \
   --upstream https://llm.example.com/v1 \
   --api-key-env EXAMPLE_API_KEY \
@@ -55,18 +101,19 @@ codex-pal \
 Useful flags:
 
 ```bash
-codex-pal status --port 4444
-codex-pal stop --port 4444
-codex-pal config --provider openrouter
-codex-pal --provider deepseek --model deepseek-chat --print-codex-command
-codex-pal --provider deepseek --model deepseek-chat --ask
-codex-pal --provider deepseek --model deepseek-chat --no-sandbox
+codex-pal relay status --port 4444
+codex-pal relay stop --port 4444
+codex-pal relay-config --provider openrouter
+codex-pal run --provider deepseek --model deepseek-chat --print-codex-command
+codex-pal run --provider deepseek --model deepseek-chat --ask
+codex-pal run --provider deepseek --model deepseek-chat --no-sandbox
 ```
 
 Extra arguments after `--` are appended to the `codex` invocation:
 
 ```bash
-codex-pal --provider deepseek --model deepseek-chat -- --oss
+codex-pal run --provider deepseek --model deepseek-chat -- --oss
+codex-pal deepseek -- --oss
 ```
 
 ## Provider Profiles

@@ -3,6 +3,7 @@ use clap::Parser;
 
 mod cli;
 mod codex;
+mod config;
 mod provider;
 mod relay;
 mod toml_value;

@@ -1,5 +1,20 @@
 use anyhow::{Result, bail};
 
+pub const BUILTIN_PROVIDERS: &[&str] = &[
+    "openai",
+    "deepseek",
+    "kimi",
+    "moonshot",
+    "qwen",
+    "dashscope",
+    "mistral",
+    "groq",
+    "xai",
+    "grok",
+    "openrouter",
+    "custom",
+];
+
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ProviderProfile {
     pub name: String,
@@ -54,6 +69,24 @@ fn provider_defaults(provider: &str) -> Result<(&'static str, &'static str)> {
         other => {
             bail!("unknown provider {other:?}; use --upstream/--api-key-env with --provider custom")
         }
+    }
+}
+
+pub fn is_builtin_provider(name: &str) -> bool {
+    let normalized = name.trim().to_ascii_lowercase();
+    provider_defaults(&normalized).is_ok()
+}
+
+pub fn default_model(provider: &str) -> Option<&'static str> {
+    match provider.trim().to_ascii_lowercase().as_str() {
+        "openai" => Some("gpt-5"),
+        "deepseek" => Some("deepseek-chat"),
+        "kimi" | "moonshot" => Some("moonshot-v1-128k"),
+        "qwen" | "dashscope" => Some("qwen-plus"),
+        "mistral" => Some("mistral-large-latest"),
+        "groq" => Some("llama-3.3-70b-versatile"),
+        "xai" | "grok" => Some("grok-4"),
+        _ => None,
     }
 }
 

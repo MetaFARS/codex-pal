@@ -11,10 +11,77 @@ pub struct CodexLaunch {
     pub provider: ProviderProfile,
     pub port: u16,
     pub model: Option<String>,
-    pub ask: bool,
-    pub no_sandbox: bool,
+    pub approval: ApprovalPolicy,
+    pub sandbox: SandboxMode,
     pub context_window: u32,
     pub extra_args: Vec<String>,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum ApprovalPolicy {
+    Never,
+    OnRequest,
+    OnFailure,
+    Untrusted,
+}
+
+impl ApprovalPolicy {
+    pub fn as_config_value(self) -> &'static str {
+        match self {
+            Self::Never => "never",
+            Self::OnRequest => "on-request",
+            Self::OnFailure => "on-failure",
+            Self::Untrusted => "untrusted",
+        }
+    }
+}
+
+impl std::str::FromStr for ApprovalPolicy {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "never" => Ok(Self::Never),
+            "on-request" => Ok(Self::OnRequest),
+            "on-failure" => Ok(Self::OnFailure),
+            "untrusted" => Ok(Self::Untrusted),
+            other => bail!("unknown approval policy {other:?}"),
+        }
+    }
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum SandboxMode {
+    ReadOnly,
+    WorkspaceWrite,
+    DangerFullAccess,
+}
+
+impl SandboxMode {
+    pub fn as_cli_value(self) -> &'static str {
+        match self {
+            Self::ReadOnly => "read-only",
+            Self::WorkspaceWrite => "workspace-write",
+            Self::DangerFullAccess => "danger-full-access",
+        }
+    }
+
+    pub fn bypasses_sandbox(self) -> bool {
+        self == Self::DangerFullAccess
+    }
+}
+
+impl std::str::FromStr for SandboxMode {
+    type Err = anyhow::Error;
+
+    fn from_str(value: &str) -> Result<Self> {
+        match value {
+            "read-only" => Ok(Self::ReadOnly),
+            "workspace-write" => Ok(Self::WorkspaceWrite),
+            "danger-full-access" => Ok(Self::DangerFullAccess),
+            other => bail!("unknown sandbox mode {other:?}"),
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -74,15 +141,16 @@ pub fn build_codex_command(launch: &CodexLaunch) -> Result<CodexCommand> {
         push_model_properties(&mut argv, model, launch.context_window);
     }
 
-    if launch.no_sandbox {
-        if launch.ask {
-            eprintln!("note: --ask ignored because --no-sandbox bypasses approvals too");
-        }
+    if launch.sandbox.bypasses_sandbox() {
         argv.push("--dangerously-bypass-approvals-and-sandbox".to_string());
-    } else if !launch.ask {
-        push_config(&mut argv, "approval_policy", &toml_value::string("never"));
+    } else {
+        push_config(
+            &mut argv,
+            "approval_policy",
+            &toml_value::string(launch.approval.as_config_value()),
+        );
         argv.push("-s".to_string());
-        argv.push("workspace-write".to_string());
+        argv.push(launch.sandbox.as_cli_value().to_string());
     }
 
     argv.extend(launch.extra_args.clone());
@@ -152,8 +220,8 @@ mod tests {
             },
             port: 4567,
             model: Some("deepseek-chat".to_string()),
-            ask: false,
-            no_sandbox: false,
+            approval: ApprovalPolicy::Never,
+            sandbox: SandboxMode::WorkspaceWrite,
             context_window: 64_000,
             extra_args: vec!["--oss".to_string()],
         };
