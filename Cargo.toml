@@ -1,0 +1,25 @@
+[package]
+name = "codex-pal"
+version = "0.1.0"
+edition = "2024"
+description = "Launch Codex CLI through codex-relay for OpenAI-compatible model providers"
+license = "MIT"
+repository = "https://github.com/MetaFARS/codex-pal"
+homepage = "https://github.com/MetaFARS/codex-pal"
+readme = "README.md"
+keywords = ["codex", "cli", "relay", "openai", "llm"]
+categories = ["command-line-utilities", "development-tools"]
+
+[[bin]]
+name = "codex-pal"
+path = "src/main.rs"
+
+[dependencies]
+anyhow = "1.0"
+clap = { version = "4.5", features = ["derive", "env"] }
+dirs = "6.0"
+serde_json = "1.0"
+which = "8.0"
+
+[dev-dependencies]
+tempfile = "3.14"
