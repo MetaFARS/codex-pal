@@ -180,8 +180,8 @@ One-time setup:
 Publish:
 
 ```bash
-git tag v0.1.0
-git push origin v0.1.0
+git tag v0.1.1
+git push origin v0.1.1
 ```
 
 The release workflow builds all wheels and the sdist, publishes to PyPI via
