@@ -191,8 +191,8 @@ pub fn write_provider_model_catalog(
     if models.is_empty() {
         return Ok(None);
     }
-    if let Some(selected_model) = selected_model {
-        if !models.iter().any(|model| model.slug == selected_model) {
+    match selected_model {
+        Some(selected_model) if !models.iter().any(|model| model.slug == selected_model) => {
             models.push(CatalogModel {
                 slug: selected_model.to_string(),
                 display_name: selected_model.to_string(),
@@ -200,6 +200,7 @@ pub fn write_provider_model_catalog(
                 context_window: 128_000,
             });
         }
+        _ => {}
     }
 
     let template = bundled_model_template(codex_bin)?;
