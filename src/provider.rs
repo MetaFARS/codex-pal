@@ -1,5 +1,13 @@
 use anyhow::{Result, bail};
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct ProviderModel {
+    pub slug: &'static str,
+    pub display_name: &'static str,
+    pub description: &'static str,
+    pub context_window: u32,
+}
+
 pub const BUILTIN_PROVIDERS: &[&str] = &[
     "openai",
     "deepseek",
@@ -78,17 +86,154 @@ pub fn is_builtin_provider(name: &str) -> bool {
 }
 
 pub fn default_model(provider: &str) -> Option<&'static str> {
+    provider_models(provider)
+        .first()
+        .map(|model| model.slug)
+        .or_else(|| match provider.trim().to_ascii_lowercase().as_str() {
+            "openai" => Some("gpt-5.5"),
+            _ => None,
+        })
+}
+
+pub fn provider_models(provider: &str) -> &'static [ProviderModel] {
     match provider.trim().to_ascii_lowercase().as_str() {
-        "openai" => Some("gpt-5"),
-        "deepseek" => Some("deepseek-chat"),
-        "kimi" | "moonshot" => Some("moonshot-v1-128k"),
-        "qwen" | "dashscope" => Some("qwen-plus"),
-        "mistral" => Some("mistral-large-latest"),
-        "groq" => Some("llama-3.3-70b-versatile"),
-        "xai" | "grok" => Some("grok-4"),
-        _ => None,
+        "deepseek" => &DEEPSEEK_MODELS,
+        "kimi" | "moonshot" => &KIMI_MODELS,
+        "qwen" | "dashscope" => &QWEN_MODELS,
+        "mistral" => &MISTRAL_MODELS,
+        "groq" => &GROQ_MODELS,
+        "xai" | "grok" => &XAI_MODELS,
+        "openrouter" => &OPENROUTER_MODELS,
+        _ => &[],
     }
 }
+
+const DEEPSEEK_MODELS: [ProviderModel; 2] = [
+    ProviderModel {
+        slug: "deepseek-v4-pro",
+        display_name: "DeepSeek V4 Pro",
+        description: "DeepSeek frontier model with thinking mode, 1M context, JSON output, and tool calls.",
+        context_window: 1_000_000,
+    },
+    ProviderModel {
+        slug: "deepseek-v4-flash",
+        display_name: "DeepSeek V4 Flash",
+        description: "DeepSeek faster V4 model with thinking mode, 1M context, JSON output, and tool calls.",
+        context_window: 1_000_000,
+    },
+];
+
+const KIMI_MODELS: [ProviderModel; 3] = [
+    ProviderModel {
+        slug: "kimi-k2.7-code",
+        display_name: "Kimi K2.7 Code",
+        description: "Kimi's strongest coding model for agentic coding workflows.",
+        context_window: 256_000,
+    },
+    ProviderModel {
+        slug: "kimi-k2.7-code-highspeed",
+        display_name: "Kimi K2.7 Code Highspeed",
+        description: "High-speed Kimi K2.7 Code variant with the same model parameters.",
+        context_window: 256_000,
+    },
+    ProviderModel {
+        slug: "kimi-k2.6",
+        display_name: "Kimi K2.6",
+        description: "Kimi general chat and multimodal model.",
+        context_window: 256_000,
+    },
+];
+
+const QWEN_MODELS: [ProviderModel; 3] = [
+    ProviderModel {
+        slug: "qwen3.7-max",
+        display_name: "Qwen3.7 Max",
+        description: "DashScope's strongest Qwen text-generation model.",
+        context_window: 1_000_000,
+    },
+    ProviderModel {
+        slug: "qwen3.7-plus",
+        display_name: "Qwen3.7 Plus",
+        description: "DashScope high-capability Qwen text-generation model.",
+        context_window: 1_000_000,
+    },
+    ProviderModel {
+        slug: "qwen3.6-flash",
+        display_name: "Qwen3.6 Flash",
+        description: "DashScope low-latency Qwen text-generation model.",
+        context_window: 1_000_000,
+    },
+];
+
+const MISTRAL_MODELS: [ProviderModel; 3] = [
+    ProviderModel {
+        slug: "mistral-medium-3-5+2",
+        display_name: "Mistral Medium 3.5",
+        description: "Mistral frontier multimodal model optimized for agentic and coding use cases.",
+        context_window: 256_000,
+    },
+    ProviderModel {
+        slug: "mistral-small-2603+1",
+        display_name: "Mistral Small 4",
+        description: "Mistral hybrid model unifying instruct, reasoning, and coding capabilities.",
+        context_window: 256_000,
+    },
+    ProviderModel {
+        slug: "devstral-2512",
+        display_name: "Devstral 2",
+        description: "Mistral code agents model for software engineering tasks.",
+        context_window: 256_000,
+    },
+];
+
+const GROQ_MODELS: [ProviderModel; 4] = [
+    ProviderModel {
+        slug: "openai/gpt-oss-120b",
+        display_name: "GPT OSS 120B",
+        description: "OpenAI's flagship open-weight model hosted by Groq.",
+        context_window: 131_072,
+    },
+    ProviderModel {
+        slug: "groq/compound",
+        display_name: "Groq Compound",
+        description: "Groq agentic system that can use built-in tools such as web search and code execution.",
+        context_window: 131_072,
+    },
+    ProviderModel {
+        slug: "llama-3.3-70b-versatile",
+        display_name: "Llama 3.3 70B Versatile",
+        description: "Groq production Llama 3.3 70B model.",
+        context_window: 131_072,
+    },
+    ProviderModel {
+        slug: "qwen/qwen3.6-27b",
+        display_name: "Qwen3.6 27B",
+        description: "Qwen3.6 preview model hosted by Groq.",
+        context_window: 131_072,
+    },
+];
+
+const XAI_MODELS: [ProviderModel; 2] = [
+    ProviderModel {
+        slug: "grok-4.3",
+        display_name: "Grok 4.3",
+        description: "xAI's recommended general-purpose model with agentic tool calling.",
+        context_window: 1_000_000,
+    },
+    ProviderModel {
+        slug: "grok-build-0.1",
+        display_name: "Grok Build 0.1",
+        description: "xAI coding model trained for agentic coding workflows.",
+        context_window: 256_000,
+    },
+];
+
+const OPENROUTER_MODELS: [ProviderModel; 1] = [ProviderModel {
+    slug: "openrouter/auto",
+    display_name: "OpenRouter Auto",
+    description: "OpenRouter router that automatically selects a suitable model for each prompt.",
+    context_window: 128_000,
+}];
 
 #[cfg(test)]
 mod tests {

@@ -26,7 +26,14 @@ pipx install codex-pal
 ```
 
 `codex-pal` expects `codex` and `codex-relay` to be installed and available on
-`PATH`.
+`PATH`. The PyPI package declares `codex-relay` as a runtime dependency. The
+Cargo package also declares the `codex-relay` crate dependency, but Cargo does
+not install dependency binaries onto `PATH` when installing a binary crate; if
+you install with Cargo, install both tools:
+
+```bash
+cargo install codex-pal codex-relay
+```
 
 ## Usage
 
@@ -54,7 +61,7 @@ the profile name matches a built-in provider. Later runs reuse it.
 Configure or modify a profile:
 
 ```bash
-codex-pal deepseek config --model deepseek-reasoner --port 4555
+codex-pal deepseek config --model deepseek-v4-pro --port 4555
 codex-pal deepseek show
 codex-pal profiles
 codex-pal providers
@@ -82,7 +89,7 @@ Use `run` when every setting should be supplied by arguments:
 ```bash
 codex-pal run \
   --provider deepseek \
-  --model deepseek-chat \
+  --model deepseek-v4-pro \
   --port 4444 \
   --approval never \
   --sandbox workspace-write
@@ -104,17 +111,23 @@ Useful flags:
 codex-pal relay status --port 4444
 codex-pal relay stop --port 4444
 codex-pal relay-config --provider openrouter
-codex-pal run --provider deepseek --model deepseek-chat --print-codex-command
-codex-pal run --provider deepseek --model deepseek-chat --ask
-codex-pal run --provider deepseek --model deepseek-chat --no-sandbox
+codex-pal run --provider deepseek --model deepseek-v4-pro --print-codex-command
+codex-pal run --provider deepseek --model deepseek-v4-pro --ask
+codex-pal run --provider deepseek --model deepseek-v4-pro --no-sandbox
 ```
 
 Extra arguments after `--` are appended to the `codex` invocation:
 
 ```bash
-codex-pal run --provider deepseek --model deepseek-chat -- --oss
+codex-pal run --provider deepseek --model deepseek-v4-pro -- --oss
 codex-pal deepseek -- --oss
 ```
+
+For relay-backed providers, `codex-pal` also injects a temporary Codex
+`model_catalog_json` file so the in-session `/model` picker lists models for the
+selected provider instead of only Codex's bundled OpenAI catalog. If Codex's
+catalog command is unavailable, launch still continues with the chosen `-m`
+model and prints a warning.
 
 ## Provider Profiles
 
@@ -127,6 +140,19 @@ codex-pal deepseek -- --oss
 | `groq` | `https://api.groq.com/openai/v1` | `GROQ_API_KEY` |
 | `xai`, `grok` | `https://api.x.ai/v1` | `XAI_API_KEY` |
 | `openrouter` | `https://openrouter.ai/api/v1` | `OPENROUTER_API_KEY` |
+
+Default models:
+
+| Provider | Default model |
+| --- | --- |
+| `openai` | `gpt-5.5` |
+| `deepseek` | `deepseek-v4-pro` |
+| `kimi`, `moonshot` | `kimi-k2.7-code` |
+| `qwen`, `dashscope` | `qwen3.7-max` |
+| `mistral` | `mistral-medium-3-5+2` |
+| `groq` | `openai/gpt-oss-120b` |
+| `xai`, `grok` | `grok-4.3` |
+| `openrouter` | `openrouter/auto` |
 
 ## Development
 
