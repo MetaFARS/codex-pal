@@ -30,7 +30,7 @@ jobs:
         with:
           components: rustfmt, clippy
       - name: Cache cargo registry and build output
-        uses: Swatinem/rust-cache@v3
+        uses: Swatinem/rust-cache@v2
       - name: Check formatting
         run: cargo fmt --check
       - name: Run clippy
