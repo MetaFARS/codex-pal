@@ -3,7 +3,10 @@ use std::io::{self, IsTerminal, Write};
 use anyhow::{Context, Result, bail};
 use clap::{Args, Parser, Subcommand};
 
-use crate::codex::{ApprovalPolicy, CodexLaunch, SandboxMode, build_codex_command, exec_codex};
+use crate::codex::{
+    ApprovalPolicy, CodexLaunch, SandboxMode, build_codex_command, exec_codex,
+    write_provider_model_catalog,
+};
 use crate::config::{ConfigFile, ProfileConfig, config_path};
 use crate::provider::{BUILTIN_PROVIDERS, ProviderProfile, default_model, is_builtin_provider};
 use crate::relay::{RelayRequest, ensure_relay, relay_status, stop_relay};
@@ -13,7 +16,8 @@ use crate::relay::{RelayRequest, ensure_relay, relay_status, stop_relay};
     name = "codex-pal",
     version,
     about = "Launch Codex through codex-relay for OpenAI-compatible providers",
-    long_about = "codex-pal has two interfaces:\n\n  codex-pal run --provider deepseek --model deepseek-chat\n      Fully explicit, script-friendly launch.\n\n  codex-pal deepseek\n  codex-pal deepseek config\n      Human-friendly profile launch and configuration."
+    disable_help_subcommand = true,
+    long_about = "codex-pal launches Codex CLI through codex-relay for OpenAI-compatible providers.\n\nInterfaces:\n  codex-pal run --provider deepseek --model deepseek-v4-pro\n      Fully explicit, script-friendly launch.\n\n  codex-pal deepseek\n  codex-pal deepseek --model deepseek-v4-pro\n      Human-friendly profile launch. Built-in provider names create profiles on first use.\n\n  codex-pal deepseek config --model deepseek-v4-pro --port 4555\n  codex-pal deepseek show\n  codex-pal deepseek status\n  codex-pal deepseek stop\n  codex-pal deepseek restart\n      Profile management commands.\n\nProviders:\n  codex-pal providers\n      Show built-in providers and default models.\n\nRelay:\n  codex-pal relay status --port 4444\n  codex-pal relay stop --port 4444\n  codex-pal relay-config --provider openrouter\n      Inspect, stop, or print relay configuration.\n\nCodex integration:\n  codex-pal injects per-run Codex config with -c and leaves ~/.codex/config.toml untouched.\n  Relay-backed providers also get a temporary model_catalog_json so Codex's /model picker lists provider-specific models.\n\nRequirements:\n  codex and codex-relay must be installed and available on PATH."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -230,16 +234,17 @@ pub fn run(cli: Cli) -> Result<()> {
             crate::relay::print_relay_config(&args.relay_bin, &profile)
         }
         Some(Command::Profile(tokens)) => handle_profile(tokens),
-        None => {
-            let config = ConfigFile::load()?;
-            let Some(default_profile) = config.default_profile else {
-                bail!(
-                    "no default profile configured; run `codex-pal <provider> config --model <model>`"
-                );
-            };
-            run_profile(default_profile, Vec::new())
-        }
+        None => run_default_profile(),
     }
+}
+
+fn run_default_profile() -> Result<()> {
+    let config = ConfigFile::load()?;
+    let Some(default_profile) = config.default_profile else {
+        print_setup_guide();
+        return Ok(());
+    };
+    run_profile(default_profile, Vec::new())
 }
 
 fn launch_explicit(args: RunArgs) -> Result<()> {
@@ -251,6 +256,9 @@ fn handle_profile(tokens: Vec<String>) -> Result<()> {
     let Some((name, rest)) = tokens.split_first() else {
         bail!("missing profile name");
     };
+    if name == "help" {
+        bail!("use `codex-pal --help` for help");
+    }
     match rest.first().map(String::as_str) {
         Some("config") => configure_profile(name, rest[1..].to_vec()),
         Some("show") => show_profile(name),
@@ -269,6 +277,10 @@ fn run_profile(name: String, args: Vec<String>) -> Result<()> {
         std::iter::once(name.as_str()).chain(args.iter().map(String::as_str)),
     )?;
     let (profile, saved) = load_or_create_profile(&name, &run_args.launch)?;
+    if let Some(message) = profile_setup_message(&name, &profile) {
+        println!("{message}");
+        return Ok(());
+    }
     let provider_args = ProviderArgs {
         provider: profile.provider.clone(),
         upstream: profile.upstream.clone(),
@@ -434,7 +446,11 @@ fn launch_options_from_profile(
     run_args: &ProfileLaunchOptions,
 ) -> Result<LaunchOptions> {
     Ok(LaunchOptions {
-        model: run_args.model.clone().or_else(|| profile.model.clone()),
+        model: run_args
+            .model
+            .clone()
+            .or_else(|| profile.model.clone())
+            .or_else(|| default_model(&profile.provider).map(str::to_string)),
         codex_bin: profile
             .codex_bin
             .clone()
@@ -474,6 +490,36 @@ fn launch_options_from_profile(
             run_args.codex_args.clone()
         },
     })
+}
+
+fn profile_setup_message(name: &str, profile: &ProfileConfig) -> Option<String> {
+    if profile.provider.trim().is_empty() {
+        return Some(format!(
+            "profile {name:?} is missing a provider.\nConfigure it with:\n  codex-pal {name} config --provider deepseek --model deepseek-v4-pro\n\nRun `codex-pal --help` for more examples."
+        ));
+    }
+    if profile.model.is_none() && default_model(&profile.provider).is_none() {
+        return Some(format!(
+            "profile {name:?} is missing a model.\nConfigure it with:\n  codex-pal {name} config --model vendor/model\n\nRun `codex-pal --help` for more examples."
+        ));
+    }
+    if profile.provider == "custom" && profile.upstream.is_none() {
+        return Some(format!(
+            "custom profile {name:?} is missing an upstream URL.\nConfigure it with:\n  codex-pal {name} config --provider custom --upstream https://llm.example.com/v1 --api-key-env EXAMPLE_API_KEY --model vendor/model\n\nRun `codex-pal --help` for more examples."
+        ));
+    }
+    if profile.provider == "custom" && profile.api_key_env.is_none() {
+        return Some(format!(
+            "custom profile {name:?} is missing an API key environment variable.\nConfigure it with:\n  codex-pal {name} config --api-key-env EXAMPLE_API_KEY --model vendor/model\n\nRun `codex-pal --help` for more examples."
+        ));
+    }
+    None
+}
+
+fn print_setup_guide() {
+    println!(
+        "No default profile is configured.\n\nStart with a built-in provider:\n  export DEEPSEEK_API_KEY=...\n  codex-pal deepseek\n\nOr configure a custom profile:\n  codex-pal work-llm config --provider custom --upstream https://llm.example.com/v1 --api-key-env EXAMPLE_API_KEY --model vendor/model\n  codex-pal work-llm\n\nUseful discovery commands:\n  codex-pal providers\n  codex-pal profiles\n  codex-pal --help"
+    );
 }
 
 fn apply_profile_config_args(profile: &mut ProfileConfig, args: ProfileConfigArgs) {
@@ -536,6 +582,22 @@ fn launch(provider: ProviderProfile, mut args: LaunchOptions) -> Result<()> {
 
     let launch = CodexLaunch {
         codex_bin: args.codex_bin.clone(),
+        model_catalog_json: if provider.needs_relay() {
+            match write_provider_model_catalog(
+                &args.codex_bin,
+                &provider,
+                args.port,
+                args.model.as_deref(),
+            ) {
+                Ok(path) => path.map(|path| path.display().to_string()),
+                Err(err) => {
+                    eprintln!("model catalog unavailable: {err}");
+                    None
+                }
+            }
+        } else {
+            None
+        },
         provider,
         port: args.port,
         model: args.model.clone(),
@@ -619,13 +681,13 @@ mod tests {
             "--provider",
             "deepseek",
             "--model",
-            "deepseek-chat",
+            "deepseek-v4-pro",
         ])
         .unwrap();
         match cli.command {
             Some(Command::Run(args)) => {
                 assert_eq!(args.provider.provider, "deepseek");
-                assert_eq!(args.launch.model.as_deref(), Some("deepseek-chat"));
+                assert_eq!(args.launch.model.as_deref(), Some("deepseek-v4-pro"));
             }
             _ => panic!("expected run command"),
         }
@@ -634,12 +696,36 @@ mod tests {
     #[test]
     fn parses_profile_shortcut() {
         let cli =
-            Cli::try_parse_from(["codex-pal", "deepseek", "--model", "deepseek-chat"]).unwrap();
+            Cli::try_parse_from(["codex-pal", "deepseek", "--model", "deepseek-v4-pro"]).unwrap();
         match cli.command {
             Some(Command::Profile(tokens)) => {
-                assert_eq!(tokens, vec!["deepseek", "--model", "deepseek-chat"]);
+                assert_eq!(tokens, vec!["deepseek", "--model", "deepseek-v4-pro"]);
             }
             _ => panic!("expected profile external subcommand"),
         }
+    }
+
+    #[test]
+    fn custom_profile_missing_upstream_gets_setup_message() {
+        let profile = ProfileConfig {
+            provider: "custom".to_string(),
+            model: Some("vendor/model".to_string()),
+            api_key_env: Some("EXAMPLE_API_KEY".to_string()),
+            ..ProfileConfig::default()
+        };
+        let message = profile_setup_message("work-llm", &profile).unwrap();
+        assert!(message.contains("missing an upstream URL"));
+        assert!(message.contains("codex-pal work-llm config"));
+    }
+
+    #[test]
+    fn builtin_profile_without_model_uses_provider_default() {
+        let profile = ProfileConfig {
+            provider: "deepseek".to_string(),
+            ..ProfileConfig::default()
+        };
+        let launch_options =
+            launch_options_from_profile(&profile, &ProfileLaunchOptions::default()).unwrap();
+        assert_eq!(launch_options.model.as_deref(), Some("deepseek-v4-pro"));
     }
 }

@@ -21,7 +21,25 @@ env:
   CARGO_HTTP_MULTIPLEXING: "false"
 
 jobs:
+  rust-checks:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          components: rustfmt, clippy
+      - name: Cache cargo registry and build output
+        uses: Swatinem/rust-cache@v3
+      - name: Check formatting
+        run: cargo fmt --check
+      - name: Run clippy
+        run: cargo clippy --all-targets --locked -- -D warnings
+      - name: Run tests
+        run: cargo test --locked
+
   linux:
+    needs: rust-checks
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
@@ -55,6 +73,7 @@ jobs:
           path: dist
 
   musllinux:
+    needs: rust-checks
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
@@ -84,6 +103,7 @@ jobs:
           path: dist
 
   windows:
+    needs: rust-checks
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
@@ -113,6 +133,7 @@ jobs:
           path: dist
 
   macos:
+    needs: rust-checks
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
@@ -137,6 +158,7 @@ jobs:
           path: dist
 
   sdist:
+    needs: rust-checks
     runs-on: ubuntu-latest
     steps:
       - uses: actions/checkout@v6

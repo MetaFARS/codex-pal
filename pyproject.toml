@@ -24,6 +24,9 @@ classifiers = [
     "Topic :: Software Development",
     "Topic :: Utilities",
 ]
+dependencies = [
+    "codex-relay>=0.3.6,<0.4",
+]
 dynamic = ["version"]
 
 [project.urls]
