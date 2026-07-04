@@ -127,7 +127,7 @@ pub struct LaunchOptions {
     pub context_window: u32,
 
     /// Extra arguments appended to the codex invocation.
-    #[arg(last = true)]
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     pub codex_args: Vec<String>,
 }
 
@@ -176,7 +176,7 @@ struct ProfileLaunchOptions {
     print_codex_command: bool,
     #[arg(long)]
     context_window: Option<u32>,
-    #[arg(last = true)]
+    #[arg(trailing_var_arg = true, allow_hyphen_values = true)]
     codex_args: Vec<String>,
 }
 
@@ -694,6 +694,43 @@ mod tests {
     }
 
     #[test]
+    fn explicit_run_forwards_unconsumed_codex_args_without_separator() {
+        let cli = Cli::try_parse_from([
+            "codex-pal",
+            "run",
+            "--provider",
+            "deepseek",
+            "exec",
+            "--skip-git-repo-check",
+            "hello",
+        ])
+        .unwrap();
+        match cli.command {
+            Some(Command::Run(args)) => {
+                assert_eq!(args.provider.provider, "deepseek");
+                assert_eq!(
+                    args.launch.codex_args,
+                    vec!["exec", "--skip-git-repo-check", "hello"]
+                );
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn explicit_run_forwards_unknown_flag_as_codex_arg() {
+        let cli =
+            Cli::try_parse_from(["codex-pal", "run", "--provider", "deepseek", "--oss"]).unwrap();
+        match cli.command {
+            Some(Command::Run(args)) => {
+                assert_eq!(args.provider.provider, "deepseek");
+                assert_eq!(args.launch.codex_args, vec!["--oss"]);
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
     fn parses_profile_shortcut() {
         let cli =
             Cli::try_parse_from(["codex-pal", "deepseek", "--model", "deepseek-v4-pro"]).unwrap();
@@ -703,6 +740,52 @@ mod tests {
             }
             _ => panic!("expected profile external subcommand"),
         }
+    }
+
+    #[test]
+    fn parses_profile_shortcut_with_unknown_codex_flag() {
+        let cli = Cli::try_parse_from(["codex-pal", "deepseek", "--oss"]).unwrap();
+        match cli.command {
+            Some(Command::Profile(tokens)) => {
+                assert_eq!(tokens, vec!["deepseek", "--oss"]);
+            }
+            _ => panic!("expected profile external subcommand"),
+        }
+    }
+
+    #[test]
+    fn profile_run_forwards_unconsumed_codex_args_without_separator() {
+        let run_args = ProfileRunArgs::try_parse_from([
+            "deepseek",
+            "--model",
+            "deepseek-v4-pro",
+            "exec",
+            "--skip-git-repo-check",
+            "hello",
+        ])
+        .unwrap();
+
+        assert_eq!(run_args.launch.model.as_deref(), Some("deepseek-v4-pro"));
+        assert_eq!(
+            run_args.launch.codex_args,
+            vec!["exec", "--skip-git-repo-check", "hello"]
+        );
+    }
+
+    #[test]
+    fn profile_run_forwards_unknown_flag_as_codex_arg() {
+        let run_args = ProfileRunArgs::try_parse_from(["deepseek", "--oss"]).unwrap();
+
+        assert_eq!(run_args.launch.codex_args, vec!["--oss"]);
+    }
+
+    #[test]
+    fn profile_run_separator_forces_codex_args() {
+        let run_args =
+            ProfileRunArgs::try_parse_from(["deepseek", "--", "--model", "gpt-5.5"]).unwrap();
+
+        assert_eq!(run_args.launch.model, None);
+        assert_eq!(run_args.launch.codex_args, vec!["--model", "gpt-5.5"]);
     }
 
     #[test]

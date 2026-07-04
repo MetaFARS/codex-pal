@@ -116,11 +116,21 @@ codex-pal run --provider deepseek --model deepseek-v4-pro --ask
 codex-pal run --provider deepseek --model deepseek-v4-pro --no-sandbox
 ```
 
-Extra arguments after `--` are appended to the `codex` invocation:
+Arguments left after `codex-pal` consumes its profile or launch options are
+appended to the `codex` invocation, so Codex subcommands and flags can be used
+directly:
 
 ```bash
-codex-pal run --provider deepseek --model deepseek-v4-pro -- --oss
-codex-pal deepseek -- --oss
+codex-pal run --provider deepseek --model deepseek-v4-pro exec --skip-git-repo-check "summarize this repo"
+codex-pal deepseek exec --skip-git-repo-check "summarize this repo"
+codex-pal deepseek --oss
+```
+
+Use `--` when you need to force a later argument to be handled by Codex even if
+it looks like a `codex-pal` option:
+
+```bash
+codex-pal deepseek -- --model gpt-5.5
 ```
 
 For relay-backed providers, `codex-pal` also injects a temporary Codex
