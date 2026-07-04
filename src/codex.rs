@@ -13,6 +13,7 @@ pub struct CodexLaunch {
     pub codex_bin: String,
     pub provider: ProviderProfile,
     pub port: u16,
+    pub relay_base_url: Option<String>,
     pub model: Option<String>,
     pub model_catalog_json: Option<String>,
     pub approval: ApprovalPolicy,
@@ -105,10 +106,21 @@ pub fn build_codex_command(launch: &CodexLaunch) -> Result<CodexCommand> {
     let mut argv = vec![launch.codex_bin.clone()];
     let mut env = Vec::new();
 
-    if launch.provider.needs_relay() {
-        let key_value = launch.provider.api_key_value().unwrap_or_default();
-        if !key_value.is_empty() {
-            env.push((launch.provider.api_key_env.clone(), key_value.clone()));
+    if launch.provider.needs_relay() || launch.relay_base_url.is_some() {
+        let configured_key = launch
+            .provider
+            .api_key_value()
+            .filter(|key| !key.is_empty());
+        let uses_remote_relay = launch.relay_base_url.is_some();
+        let codex_env_key = if configured_key.is_some() || !uses_remote_relay {
+            launch.provider.api_key_env.clone()
+        } else {
+            "CODEX_PAL_RELAY_API_KEY".to_string()
+        };
+        let key_value = configured_key
+            .or_else(|| uses_remote_relay.then(|| "codex-pal-remote-relay".to_string()));
+        if let Some(key_value) = key_value {
+            env.push((codex_env_key.clone(), key_value.clone()));
             env.push(("OPENAI_API_KEY".to_string(), key_value));
         }
 
@@ -125,7 +137,7 @@ pub fn build_codex_command(launch: &CodexLaunch) -> Result<CodexCommand> {
         push_config(
             &mut argv,
             "model_providers.codex-pal.base_url",
-            &toml_value::string(&format!("http://127.0.0.1:{}/v1", launch.port)),
+            &toml_value::string(&relay_base_url(launch)),
         );
         push_config(
             &mut argv,
@@ -135,7 +147,7 @@ pub fn build_codex_command(launch: &CodexLaunch) -> Result<CodexCommand> {
         push_config(
             &mut argv,
             "model_providers.codex-pal.env_key",
-            &toml_value::string(&launch.provider.api_key_env),
+            &toml_value::string(&codex_env_key),
         );
         if let Some(path) = &launch.model_catalog_json {
             push_config(&mut argv, "model_catalog_json", &toml_value::string(path));
@@ -219,6 +231,13 @@ pub fn write_provider_model_catalog(
 fn push_config(argv: &mut Vec<String>, key: &str, value: &str) {
     argv.push("-c".to_string());
     argv.push(format!("{key}={value}"));
+}
+
+fn relay_base_url(launch: &CodexLaunch) -> String {
+    launch
+        .relay_base_url
+        .clone()
+        .unwrap_or_else(|| format!("http://127.0.0.1:{}/v1", launch.port))
 }
 
 #[derive(Debug)]
@@ -384,6 +403,7 @@ mod tests {
                 api_key: Some("dummy".to_string()),
             },
             port: 4567,
+            relay_base_url: None,
             model: Some("deepseek-v4-pro".to_string()),
             model_catalog_json: None,
             approval: ApprovalPolicy::Never,
@@ -417,5 +437,37 @@ mod tests {
                 .env
                 .contains(&("DEEPSEEK_API_KEY".to_string(), "dummy".to_string()))
         );
+    }
+
+    #[test]
+    fn builds_remote_relay_config_args_with_dummy_key() {
+        let launch = CodexLaunch {
+            codex_bin: "true".to_string(),
+            provider: ProviderProfile {
+                name: "deepseek".to_string(),
+                upstream: "https://api.deepseek.com/v1".to_string(),
+                api_key_env: "CODEX_PAL_TEST_MISSING_API_KEY".to_string(),
+                api_key: None,
+            },
+            port: 4567,
+            relay_base_url: Some("https://relay.example.com/v1".to_string()),
+            model: Some("deepseek-v4-pro".to_string()),
+            model_catalog_json: None,
+            approval: ApprovalPolicy::Never,
+            sandbox: SandboxMode::WorkspaceWrite,
+            context_window: 64_000,
+            extra_args: Vec::new(),
+        };
+        let command = build_codex_command(&launch).unwrap();
+        assert!(command.argv.contains(
+            &"model_providers.codex-pal.base_url=\"https://relay.example.com/v1\"".to_string()
+        ));
+        assert!(command.argv.contains(
+            &"model_providers.codex-pal.env_key=\"CODEX_PAL_RELAY_API_KEY\"".to_string()
+        ));
+        assert!(command.env.contains(&(
+            "CODEX_PAL_RELAY_API_KEY".to_string(),
+            "codex-pal-remote-relay".to_string()
+        )));
     }
 }

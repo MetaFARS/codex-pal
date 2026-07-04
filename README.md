@@ -116,6 +116,22 @@ codex-pal run --provider deepseek --model deepseek-v4-pro --ask
 codex-pal run --provider deepseek --model deepseek-v4-pro --no-sandbox
 ```
 
+Use an existing remote `codex-relay` service instead of starting a local sidecar:
+
+```bash
+codex-pal run \
+  --provider deepseek \
+  --model deepseek-v4-pro \
+  --relay-url https://relay.example.com
+
+codex-pal deepseek --relay-url https://relay.example.com
+codex-pal deepseek config --relay-url https://relay.example.com
+```
+
+`--relay-url` accepts either the relay root URL or its `/v1` base URL. When it
+is set, `codex-pal` skips local relay process management and points Codex at
+the remote relay.
+
 Arguments left after `codex-pal` consumes its profile or launch options are
 appended to the `codex` invocation, so Codex subcommands and flags can be used
 directly:

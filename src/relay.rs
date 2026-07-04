@@ -153,9 +153,51 @@ pub fn print_relay_config(relay_bin: &str, provider: &ProviderProfile) -> Result
     Ok(())
 }
 
+pub fn normalize_relay_base_url(raw: &str) -> Result<String> {
+    let value = raw.trim().trim_end_matches('/');
+    if value.is_empty() {
+        bail!("relay URL must not be empty");
+    }
+    if !(value.starts_with("http://") || value.starts_with("https://")) {
+        bail!("relay URL must start with http:// or https://");
+    }
+    if value.ends_with("/v1") {
+        Ok(value.to_string())
+    } else {
+        Ok(format!("{value}/v1"))
+    }
+}
+
 fn port_in_use(port: u16) -> bool {
     let addr = SocketAddr::from(([127, 0, 0, 1], port));
     TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_remote_relay_url_to_v1() {
+        assert_eq!(
+            normalize_relay_base_url("https://relay.example.com").unwrap(),
+            "https://relay.example.com/v1"
+        );
+        assert_eq!(
+            normalize_relay_base_url("https://relay.example.com/v1/").unwrap(),
+            "https://relay.example.com/v1"
+        );
+        assert_eq!(
+            normalize_relay_base_url("http://127.0.0.1:4444/base").unwrap(),
+            "http://127.0.0.1:4444/base/v1"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_remote_relay_url() {
+        assert!(normalize_relay_base_url("").is_err());
+        assert!(normalize_relay_base_url("relay.example.com").is_err());
+    }
 }
 
 fn wait_healthy(port: u16) -> bool {
