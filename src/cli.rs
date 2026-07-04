@@ -9,7 +9,9 @@ use crate::codex::{
 };
 use crate::config::{ConfigFile, ProfileConfig, config_path};
 use crate::provider::{BUILTIN_PROVIDERS, ProviderProfile, default_model, is_builtin_provider};
-use crate::relay::{RelayRequest, ensure_relay, relay_status, stop_relay};
+use crate::relay::{
+    RelayRequest, ensure_relay, normalize_relay_base_url, relay_status, stop_relay,
+};
 
 #[derive(Debug, Parser)]
 #[command(
@@ -17,7 +19,7 @@ use crate::relay::{RelayRequest, ensure_relay, relay_status, stop_relay};
     version,
     about = "Launch Codex through codex-relay for OpenAI-compatible providers",
     disable_help_subcommand = true,
-    long_about = "codex-pal launches Codex CLI through codex-relay for OpenAI-compatible providers.\n\nInterfaces:\n  codex-pal run --provider deepseek --model deepseek-v4-pro\n      Fully explicit, script-friendly launch.\n\n  codex-pal deepseek\n  codex-pal deepseek --model deepseek-v4-pro\n      Human-friendly profile launch. Built-in provider names create profiles on first use.\n\n  codex-pal deepseek config --model deepseek-v4-pro --port 4555\n  codex-pal deepseek show\n  codex-pal deepseek status\n  codex-pal deepseek stop\n  codex-pal deepseek restart\n      Profile management commands.\n\nProviders:\n  codex-pal providers\n      Show built-in providers and default models.\n\nRelay:\n  codex-pal relay status --port 4444\n  codex-pal relay stop --port 4444\n  codex-pal relay-config --provider openrouter\n      Inspect, stop, or print relay configuration.\n\nCodex integration:\n  codex-pal injects per-run Codex config with -c and leaves ~/.codex/config.toml untouched.\n  Relay-backed providers also get a temporary model_catalog_json so Codex's /model picker lists provider-specific models.\n\nRequirements:\n  codex and codex-relay must be installed and available on PATH."
+    long_about = "codex-pal launches Codex CLI through codex-relay for OpenAI-compatible providers.\n\nInterfaces:\n  codex-pal run --provider deepseek --model deepseek-v4-pro\n      Fully explicit, script-friendly launch.\n\n  codex-pal deepseek\n  codex-pal deepseek --model deepseek-v4-pro\n      Human-friendly profile launch. Built-in provider names create profiles on first use.\n\n  codex-pal deepseek config --model deepseek-v4-pro --port 4555\n  codex-pal deepseek show\n  codex-pal deepseek status\n  codex-pal deepseek stop\n  codex-pal deepseek restart\n      Profile management commands.\n\nProviders:\n  codex-pal providers\n      Show built-in providers and default models.\n\nRelay:\n  codex-pal relay status --port 4444\n  codex-pal relay stop --port 4444\n  codex-pal relay-config --provider openrouter\n      Inspect, stop, or print relay configuration.\n\nCodex integration:\n  codex-pal injects per-run Codex config with -c and leaves ~/.codex/config.toml untouched.\n  Relay-backed providers also get a temporary model_catalog_json so Codex's /model picker lists provider-specific models.\n\nRequirements:\n  codex must be installed and available on PATH. codex-relay must be installed for local relay launches, or pass --relay-url for an existing remote relay."
 )]
 pub struct Cli {
     #[command(subcommand)]
@@ -98,6 +100,10 @@ pub struct LaunchOptions {
     #[arg(long, env = "CODEX_PAL_PORT", default_value_t = 4444)]
     pub port: u16,
 
+    /// Remote codex-relay base URL. If set, no local relay is started.
+    #[arg(long, env = "CODEX_PAL_RELAY_URL")]
+    pub relay_url: Option<String>,
+
     /// Approval policy passed to Codex config.
     #[arg(long, env = "CODEX_PAL_APPROVAL", default_value = "never")]
     pub approval: ApprovalPolicy,
@@ -163,6 +169,8 @@ struct ProfileLaunchOptions {
     #[arg(long)]
     port: Option<u16>,
     #[arg(long)]
+    relay_url: Option<String>,
+    #[arg(long)]
     approval: Option<ApprovalPolicy>,
     #[arg(long)]
     sandbox: Option<SandboxMode>,
@@ -196,6 +204,8 @@ struct ProfileConfigArgs {
     codex_bin: Option<String>,
     #[arg(long)]
     relay_bin: Option<String>,
+    #[arg(long)]
+    relay_url: Option<String>,
     #[arg(long)]
     approval: Option<ApprovalPolicy>,
     #[arg(long)]
@@ -349,13 +359,21 @@ fn show_profile(name: &str) -> Result<()> {
 
 fn profile_status(name: &str) -> Result<()> {
     let profile = required_profile(name)?;
-    println!("{}", relay_status(profile.port.unwrap_or(4444)));
+    if let Some(relay_url) = &profile.relay_url {
+        println!("remote relay {relay_url} (not managed)");
+    } else {
+        println!("{}", relay_status(profile.port.unwrap_or(4444)));
+    }
     Ok(())
 }
 
 fn profile_stop(name: &str) -> Result<()> {
     let profile = required_profile(name)?;
-    println!("{}", stop_relay(profile.port.unwrap_or(4444))?);
+    if let Some(relay_url) = &profile.relay_url {
+        println!("remote relay {relay_url} (not managed)");
+    } else {
+        println!("{}", stop_relay(profile.port.unwrap_or(4444))?);
+    }
     Ok(())
 }
 
@@ -422,6 +440,7 @@ fn load_or_create_profile(
         provider: name.to_string(),
         model,
         port: Some(run_args.port.unwrap_or(4444)),
+        relay_url: run_args.relay_url.clone(),
         approval: Some(
             run_args
                 .approval
@@ -460,6 +479,10 @@ fn launch_options_from_profile(
             .clone()
             .unwrap_or_else(|| "codex-relay".to_string()),
         port: run_args.port.or(profile.port).unwrap_or(4444),
+        relay_url: run_args
+            .relay_url
+            .clone()
+            .or_else(|| profile.relay_url.clone()),
         approval: run_args.approval.unwrap_or_else(|| {
             profile
                 .approval
@@ -493,6 +516,7 @@ fn launch_options_from_profile(
 }
 
 fn profile_setup_message(name: &str, profile: &ProfileConfig) -> Option<String> {
+    let uses_remote_relay = profile.relay_url.is_some();
     if profile.provider.trim().is_empty() {
         return Some(format!(
             "profile {name:?} is missing a provider.\nConfigure it with:\n  codex-pal {name} config --provider deepseek --model deepseek-v4-pro\n\nRun `codex-pal --help` for more examples."
@@ -503,12 +527,12 @@ fn profile_setup_message(name: &str, profile: &ProfileConfig) -> Option<String> 
             "profile {name:?} is missing a model.\nConfigure it with:\n  codex-pal {name} config --model vendor/model\n\nRun `codex-pal --help` for more examples."
         ));
     }
-    if profile.provider == "custom" && profile.upstream.is_none() {
+    if profile.provider == "custom" && !uses_remote_relay && profile.upstream.is_none() {
         return Some(format!(
             "custom profile {name:?} is missing an upstream URL.\nConfigure it with:\n  codex-pal {name} config --provider custom --upstream https://llm.example.com/v1 --api-key-env EXAMPLE_API_KEY --model vendor/model\n\nRun `codex-pal --help` for more examples."
         ));
     }
-    if profile.provider == "custom" && profile.api_key_env.is_none() {
+    if profile.provider == "custom" && !uses_remote_relay && profile.api_key_env.is_none() {
         return Some(format!(
             "custom profile {name:?} is missing an API key environment variable.\nConfigure it with:\n  codex-pal {name} config --api-key-env EXAMPLE_API_KEY --model vendor/model\n\nRun `codex-pal --help` for more examples."
         ));
@@ -544,6 +568,9 @@ fn apply_profile_config_args(profile: &mut ProfileConfig, args: ProfileConfigArg
     if let Some(relay_bin) = args.relay_bin {
         profile.relay_bin = Some(relay_bin);
     }
+    if let Some(relay_url) = args.relay_url {
+        profile.relay_url = Some(relay_url);
+    }
     if let Some(approval) = args.approval {
         profile.approval = Some(approval.as_config_value().to_string());
     }
@@ -557,21 +584,30 @@ fn apply_profile_config_args(profile: &mut ProfileConfig, args: ProfileConfigArg
 
 fn launch(provider: ProviderProfile, mut args: LaunchOptions) -> Result<()> {
     normalize_launch_options(&mut args);
+    let relay_base_url = args
+        .relay_url
+        .as_deref()
+        .map(normalize_relay_base_url)
+        .transpose()?;
+    let uses_relay = provider.needs_relay() || relay_base_url.is_some();
     let relay = RelayRequest {
         relay_bin: args.relay_bin.clone(),
         provider: provider.clone(),
         port: args.port,
     };
 
-    let relay_state = if provider.needs_relay() && !args.no_start_relay {
+    let relay_state = if provider.needs_relay() && relay_base_url.is_none() && !args.no_start_relay
+    {
         Some(ensure_relay(&relay)?)
     } else {
         None
     };
 
-    if let Some(state) = &relay_state {
+    if let Some(url) = &relay_base_url {
+        eprintln!("relay     remote {url}");
+    } else if let Some(state) = &relay_state {
         eprintln!("relay     {state}");
-    } else if provider.needs_relay() {
+    } else if uses_relay {
         eprintln!(
             "relay     not started (--no-start-relay); expecting port {}",
             args.port
@@ -582,7 +618,7 @@ fn launch(provider: ProviderProfile, mut args: LaunchOptions) -> Result<()> {
 
     let launch = CodexLaunch {
         codex_bin: args.codex_bin.clone(),
-        model_catalog_json: if provider.needs_relay() {
+        model_catalog_json: if uses_relay {
             match write_provider_model_catalog(
                 &args.codex_bin,
                 &provider,
@@ -600,6 +636,7 @@ fn launch(provider: ProviderProfile, mut args: LaunchOptions) -> Result<()> {
         },
         provider,
         port: args.port,
+        relay_base_url,
         model: args.model.clone(),
         approval: args.approval,
         sandbox: args.sandbox,
@@ -688,6 +725,29 @@ mod tests {
             Some(Command::Run(args)) => {
                 assert_eq!(args.provider.provider, "deepseek");
                 assert_eq!(args.launch.model.as_deref(), Some("deepseek-v4-pro"));
+            }
+            _ => panic!("expected run command"),
+        }
+    }
+
+    #[test]
+    fn explicit_run_parses_remote_relay_url() {
+        let cli = Cli::try_parse_from([
+            "codex-pal",
+            "run",
+            "--provider",
+            "deepseek",
+            "--relay-url",
+            "https://relay.example.com",
+        ])
+        .unwrap();
+        match cli.command {
+            Some(Command::Run(args)) => {
+                assert_eq!(args.provider.provider, "deepseek");
+                assert_eq!(
+                    args.launch.relay_url.as_deref(),
+                    Some("https://relay.example.com")
+                );
             }
             _ => panic!("expected run command"),
         }
@@ -789,6 +849,33 @@ mod tests {
     }
 
     #[test]
+    fn profile_launch_options_include_remote_relay_url() {
+        let profile = ProfileConfig {
+            provider: "deepseek".to_string(),
+            relay_url: Some("https://saved-relay.example.com".to_string()),
+            ..ProfileConfig::default()
+        };
+        let launch_options =
+            launch_options_from_profile(&profile, &ProfileLaunchOptions::default()).unwrap();
+        assert_eq!(
+            launch_options.relay_url.as_deref(),
+            Some("https://saved-relay.example.com")
+        );
+
+        let run_args = ProfileRunArgs::try_parse_from([
+            "deepseek",
+            "--relay-url",
+            "https://run-relay.example.com",
+        ])
+        .unwrap();
+        let launch_options = launch_options_from_profile(&profile, &run_args.launch).unwrap();
+        assert_eq!(
+            launch_options.relay_url.as_deref(),
+            Some("https://run-relay.example.com")
+        );
+    }
+
+    #[test]
     fn custom_profile_missing_upstream_gets_setup_message() {
         let profile = ProfileConfig {
             provider: "custom".to_string(),
@@ -799,6 +886,17 @@ mod tests {
         let message = profile_setup_message("work-llm", &profile).unwrap();
         assert!(message.contains("missing an upstream URL"));
         assert!(message.contains("codex-pal work-llm config"));
+    }
+
+    #[test]
+    fn custom_profile_with_remote_relay_does_not_need_upstream() {
+        let profile = ProfileConfig {
+            provider: "custom".to_string(),
+            model: Some("vendor/model".to_string()),
+            relay_url: Some("https://relay.example.com".to_string()),
+            ..ProfileConfig::default()
+        };
+        assert!(profile_setup_message("work-llm", &profile).is_none());
     }
 
     #[test]
