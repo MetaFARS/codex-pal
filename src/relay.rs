@@ -173,33 +173,6 @@ fn port_in_use(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
 }
 
-#[cfg(test)]
-mod tests {
-    use super::*;
-
-    #[test]
-    fn normalizes_remote_relay_url_to_v1() {
-        assert_eq!(
-            normalize_relay_base_url("https://relay.example.com").unwrap(),
-            "https://relay.example.com/v1"
-        );
-        assert_eq!(
-            normalize_relay_base_url("https://relay.example.com/v1/").unwrap(),
-            "https://relay.example.com/v1"
-        );
-        assert_eq!(
-            normalize_relay_base_url("http://127.0.0.1:4444/base").unwrap(),
-            "http://127.0.0.1:4444/base/v1"
-        );
-    }
-
-    #[test]
-    fn rejects_invalid_remote_relay_url() {
-        assert!(normalize_relay_base_url("").is_err());
-        assert!(normalize_relay_base_url("relay.example.com").is_err());
-    }
-}
-
 fn wait_healthy(port: u16) -> bool {
     let deadline = Instant::now() + HEALTH_TIMEOUT;
     while Instant::now() < deadline {
@@ -265,4 +238,31 @@ fn terminate_pid(pid: u32) -> Result<()> {
         bail!("taskkill for pid {pid} exited with {status}");
     }
     Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn normalizes_remote_relay_url_to_v1() {
+        assert_eq!(
+            normalize_relay_base_url("https://relay.example.com").unwrap(),
+            "https://relay.example.com/v1"
+        );
+        assert_eq!(
+            normalize_relay_base_url("https://relay.example.com/v1/").unwrap(),
+            "https://relay.example.com/v1"
+        );
+        assert_eq!(
+            normalize_relay_base_url("http://127.0.0.1:4444/base").unwrap(),
+            "http://127.0.0.1:4444/base/v1"
+        );
+    }
+
+    #[test]
+    fn rejects_invalid_remote_relay_url() {
+        assert!(normalize_relay_base_url("").is_err());
+        assert!(normalize_relay_base_url("relay.example.com").is_err());
+    }
 }
