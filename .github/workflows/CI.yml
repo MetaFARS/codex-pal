@@ -38,7 +38,7 @@ jobs:
       - name: Run tests
         run: cargo test --locked
 
-  linux:
+  build-wheels:
     needs: rust-checks
     runs-on: ${{ matrix.platform.runner }}
     strategy:
@@ -47,115 +47,122 @@ jobs:
         platform:
           - runner: ubuntu-22.04
             target: x86_64
-          - runner: ubuntu-22.04
-            target: x86
+            manylinux: "2_17"
+            artifact: linux-x86_64
+            docker_platform: linux/amd64
+            test_image: quay.io/pypa/manylinux2014_x86_64
+            python_command: /opt/python/cp311-cp311/bin/python
+            binary_command: /opt/python/cp311-cp311/bin/codex-pal
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
-          - runner: ubuntu-22.04
-            target: s390x
-          - runner: ubuntu-22.04
-            target: ppc64le
-    steps:
-      - uses: actions/checkout@v6
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          manylinux: auto
-      - name: Upload wheels
-        uses: actions/upload-artifact@v6
-        with:
-          name: wheels-linux-${{ matrix.platform.target }}
-          path: dist
-
-  musllinux:
-    needs: rust-checks
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
+            manylinux: "2_17"
+            artifact: linux-aarch64
+            docker_platform: linux/arm64
+            test_image: quay.io/pypa/manylinux2014_aarch64
+            python_command: /opt/python/cp311-cp311/bin/python
+            binary_command: /opt/python/cp311-cp311/bin/codex-pal
           - runner: ubuntu-22.04
             target: x86_64
-          - runner: ubuntu-22.04
-            target: x86
+            manylinux: musllinux_1_2
+            artifact: musllinux-x86_64
+            docker_platform: linux/amd64
+            test_image: python:3.11-alpine
+            python_command: python
+            binary_command: codex-pal
           - runner: ubuntu-22.04
             target: aarch64
-          - runner: ubuntu-22.04
-            target: armv7
-    steps:
-      - uses: actions/checkout@v6
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
-        with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-          manylinux: musllinux_1_2
-      - name: Upload wheels
-        uses: actions/upload-artifact@v6
-        with:
-          name: wheels-musllinux-${{ matrix.platform.target }}
-          path: dist
-
-  windows:
-    needs: rust-checks
-    runs-on: ${{ matrix.platform.runner }}
-    strategy:
-      fail-fast: false
-      matrix:
-        platform:
+            manylinux: musllinux_1_2
+            artifact: musllinux-aarch64
+            docker_platform: linux/arm64
+            test_image: python:3.11-alpine
+            python_command: python
+            binary_command: codex-pal
+          - runner: macos-15-intel
+            target: x86_64
+            manylinux: "off"
+            artifact: macos-x86_64
+          - runner: macos-latest
+            target: aarch64
+            manylinux: "off"
+            artifact: macos-aarch64
           - runner: windows-latest
             target: x64
+            manylinux: "off"
+            artifact: windows-x86_64
             python_arch: x64
-          - runner: windows-latest
-            target: x86
-            python_arch: x86
           - runner: windows-11-arm
             target: aarch64
+            manylinux: "off"
+            artifact: windows-aarch64
             python_arch: arm64
     steps:
       - uses: actions/checkout@v6
+      - name: Enable Linux ARM64 emulation
+        if: runner.os == 'Linux' && matrix.platform.target == 'aarch64'
+        uses: docker/setup-qemu-action@v3
       - name: Build wheels
         uses: PyO3/maturin-action@v1
         with:
           target: ${{ matrix.platform.target }}
           args: --release --out dist
           sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
+          manylinux: ${{ matrix.platform.manylinux }}
+      - name: Smoke-test Linux wheel
+        if: runner.os == 'Linux'
+        run: >-
+          docker run --rm --platform ${{ matrix.platform.docker_platform }}
+          -v "${{ github.workspace }}/dist:/dist:ro"
+          ${{ matrix.platform.test_image }}
+          sh -c '${{ matrix.platform.python_command }} -m pip install --no-deps /dist/*.whl && ${{ matrix.platform.binary_command }} --version'
+      - name: Set up Python on macOS
+        if: runner.os == 'macOS'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+      - name: Set up Python on Windows
+        if: runner.os == 'Windows'
+        uses: actions/setup-python@v6
+        with:
+          python-version: '3.11'
+          architecture: ${{ matrix.platform.python_arch }}
+      - name: Smoke-test macOS wheel
+        if: runner.os == 'macOS'
+        run: python -m pip install --no-deps dist/*.whl && codex-pal --version
+      - name: Smoke-test Windows wheel
+        if: runner.os == 'Windows'
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem dist/*.whl).FullName
+          python -m pip install --no-deps $wheel
+          codex-pal --version
       - name: Upload wheels
         uses: actions/upload-artifact@v6
         with:
-          name: wheels-windows-${{ matrix.platform.target }}
+          name: wheels-${{ matrix.platform.artifact }}
           path: dist
 
-  macos:
-    needs: rust-checks
-    runs-on: ${{ matrix.platform.runner }}
+  windows-python-smoke:
+    needs: build-wheels
+    runs-on: windows-latest
     strategy:
       fail-fast: false
       matrix:
-        platform:
-          - runner: macos-15-intel
-            target: x86_64
-          - runner: macos-latest
-            target: aarch64
+        python-version: ['3.11', '3.12', '3.13', '3.14']
     steps:
-      - uses: actions/checkout@v6
-      - name: Build wheels
-        uses: PyO3/maturin-action@v1
+      - uses: actions/download-artifact@v7
         with:
-          target: ${{ matrix.platform.target }}
-          args: --release --out dist
-          sccache: ${{ !startsWith(github.ref, 'refs/tags/') }}
-      - name: Upload wheels
-        uses: actions/upload-artifact@v6
-        with:
-          name: wheels-macos-${{ matrix.platform.target }}
+          name: wheels-windows-x86_64
           path: dist
+      - uses: actions/setup-python@v6
+        with:
+          python-version: ${{ matrix.python-version }}
+          architecture: x64
+      - name: Install and run the same wheel
+        shell: pwsh
+        run: |
+          $wheel = (Get-ChildItem dist/*.whl).FullName
+          python -m pip install --no-deps $wheel
+          codex-pal --version
 
   sdist:
     needs: rust-checks

@@ -1,7 +1,7 @@
 use std::fmt;
 use std::fs::{self, File};
 use std::net::{SocketAddr, TcpStream};
-use std::path::PathBuf;
+use std::path::{Path, PathBuf};
 use std::process::{Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
@@ -57,19 +57,14 @@ pub fn ensure_relay(request: &RelayRequest) -> Result<RelayState> {
             port: request.port,
         });
     }
-    if which::which(&request.relay_bin).is_err() {
-        bail!(
-            "codex-relay binary {:?} not found in PATH; install codex-relay or set --relay-bin",
-            request.relay_bin
-        );
-    }
+    let relay_bin = resolve_relay_bin(&request.relay_bin)?;
 
     let log = File::create(&log_file)
         .with_context(|| format!("creating relay log {}", log_file.display()))?;
     let log_err = log
         .try_clone()
         .with_context(|| format!("cloning relay log {}", log_file.display()))?;
-    let mut cmd = Command::new(&request.relay_bin);
+    let mut cmd = Command::new(&relay_bin);
     cmd.arg("--port")
         .arg(request.port.to_string())
         .arg("--upstream")
@@ -87,7 +82,7 @@ pub fn ensure_relay(request: &RelayRequest) -> Result<RelayState> {
 
     let mut child = cmd
         .spawn()
-        .with_context(|| format!("starting {}", request.relay_bin))?;
+        .with_context(|| format!("starting {}", relay_bin.display()))?;
     fs::write(&pid_file, child.id().to_string())
         .with_context(|| format!("writing relay pid {}", pid_file.display()))?;
 
@@ -133,10 +128,8 @@ pub fn stop_relay(port: u16) -> Result<String> {
 }
 
 pub fn print_relay_config(relay_bin: &str, provider: &ProviderProfile) -> Result<()> {
-    if which::which(relay_bin).is_err() {
-        bail!("codex-relay binary {relay_bin:?} not found in PATH");
-    }
-    let mut cmd = Command::new(relay_bin);
+    let relay_bin = resolve_relay_bin(relay_bin)?;
+    let mut cmd = Command::new(&relay_bin);
     cmd.arg("--print-config")
         .arg("--upstream")
         .arg(&provider.upstream)
@@ -151,6 +144,32 @@ pub fn print_relay_config(relay_bin: &str, provider: &ProviderProfile) -> Result
         bail!("codex-relay --print-config exited with {status}");
     }
     Ok(())
+}
+
+fn resolve_relay_bin(relay_bin: &str) -> Result<PathBuf> {
+    if Path::new(relay_bin).components().count() == 1
+        && let Ok(current_exe) = std::env::current_exe()
+        && let Some(sibling) = sibling_executable(&current_exe, relay_bin)
+        && sibling.is_file()
+    {
+        return Ok(sibling);
+    }
+
+    which::which(relay_bin).with_context(|| {
+        format!(
+            "codex-relay binary {relay_bin:?} not found beside codex-pal or in PATH; install codex-relay or set --relay-bin"
+        )
+    })
+}
+
+fn sibling_executable(current_exe: &Path, relay_bin: &str) -> Option<PathBuf> {
+    let suffix = std::env::consts::EXE_SUFFIX;
+    let file_name = if suffix.is_empty() || relay_bin.ends_with(suffix) {
+        relay_bin.to_string()
+    } else {
+        format!("{relay_bin}{suffix}")
+    };
+    Some(current_exe.parent()?.join(file_name))
 }
 
 pub fn normalize_relay_base_url(raw: &str) -> Result<String> {
@@ -264,5 +283,20 @@ mod tests {
     fn rejects_invalid_remote_relay_url() {
         assert!(normalize_relay_base_url("").is_err());
         assert!(normalize_relay_base_url("relay.example.com").is_err());
+    }
+
+    #[test]
+    fn locates_dependency_binary_beside_pal_executable() {
+        let current = Path::new("env")
+            .join("bin")
+            .join(format!("codex-pal{}", std::env::consts::EXE_SUFFIX));
+        assert_eq!(
+            sibling_executable(&current, "codex-relay"),
+            Some(
+                Path::new("env")
+                    .join("bin")
+                    .join(format!("codex-relay{}", std::env::consts::EXE_SUFFIX))
+            )
+        );
     }
 }

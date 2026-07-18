@@ -6,7 +6,7 @@ build-backend = "maturin"
 name = "codex-pal"
 description = "Launch Codex CLI through codex-relay for OpenAI-compatible model providers"
 readme = "README.md"
-requires-python = ">=3.9"
+requires-python = ">=3.11"
 license = "MIT"
 authors = [
     { name = "MetaFARS" },
@@ -25,7 +25,7 @@ classifiers = [
     "Topic :: Utilities",
 ]
 dependencies = [
-    "codex-relay>=0.3.6,<0.4",
+    "codex-relay>=0.5.4,<0.6",
 ]
 dynamic = ["version"]
 

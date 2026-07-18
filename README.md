@@ -25,11 +25,14 @@ From PyPI:
 pipx install codex-pal
 ```
 
-`codex-pal` expects `codex` and `codex-relay` to be installed and available on
-`PATH`. The PyPI package declares `codex-relay` as a runtime dependency. The
-Cargo package also declares the `codex-relay` crate dependency, but Cargo does
-not install dependency binaries onto `PATH` when installing a binary crate; if
-you install with Cargo, install both tools:
+The PyPI package installs `codex-relay` as a runtime dependency. `codex-pal`
+finds that dependency beside its own executable (including in pipx's private
+environment) before searching `PATH`. To expose `codex-relay` as a standalone
+shell command too, install with `pipx install codex-pal --include-deps`.
+
+The Cargo package also declares the `codex-relay` crate dependency, but Cargo
+does not install dependency binaries onto `PATH` when installing a binary
+crate; if you install with Cargo, install both tools:
 
 ```bash
 cargo install codex-pal codex-relay
