@@ -41,13 +41,17 @@ Alternatively, use Homebrew:
 brew install --cask codex
 ```
 
+If Node.js and npm are already installed, you can install Codex CLI directly from npm instead:
+
+```bash
+npm install -g @openai/codex
+```
+
 Verify the installation:
 
 ```bash
 codex --version
 ```
-
-OpenAI officially provides three ways to install Codex CLI: the installation script, Homebrew, and npm.
 
 ### 2. Install Python and pipx
 
@@ -150,6 +154,12 @@ Use the official OpenAI installation script:
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
+
+If Node.js and npm are already installed, you can install Codex CLI directly from npm instead:
+
+```bash
+npm install -g @openai/codex
 ```
 
 Verify the installation:
@@ -264,13 +274,17 @@ Use the official OpenAI PowerShell installation script:
 powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
 ```
 
+If Node.js and npm are already installed, you can install Codex CLI directly from npm instead:
+
+```powershell
+npm install -g @openai/codex
+```
+
 Verify the installation:
 
 ```powershell
 codex --version
 ```
-
-OpenAI currently provides a native Windows PowerShell installation script. Codex CLI can also be installed through npm.
 
 When installed through npm, the actual entry point is usually `codex.cmd`. On Windows, `codex-pal` automatically resolves the default name `codex` to `codex.cmd` or `codex.exe`, so no additional configuration is normally required. To see the actual entry point, run:
 

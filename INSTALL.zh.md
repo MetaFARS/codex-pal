@@ -41,13 +41,17 @@ curl -fsSL https://chatgpt.com/codex/install.sh | sh
 brew install --cask codex
 ```
 
+如果已经安装 Node.js 和 npm，也可以直接从 npm 安装 Codex CLI：
+
+```bash
+npm install -g @openai/codex
+```
+
 安装后检查：
 
 ```bash
 codex --version
 ```
-
-OpenAI 官方同时提供安装脚本、Homebrew 和 npm 三种 Codex CLI 安装方式。
 
 ### 2. 安装 Python 和 pipx
 
@@ -150,6 +154,12 @@ pipx --version
 
 ```bash
 curl -fsSL https://chatgpt.com/codex/install.sh | sh
+```
+
+如果已经安装 Node.js 和 npm，也可以直接从 npm 安装 Codex CLI：
+
+```bash
+npm install -g @openai/codex
 ```
 
 安装后检查：
@@ -264,13 +274,17 @@ py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
 powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
 ```
 
+如果已经安装 Node.js 和 npm，也可以直接从 npm 安装 Codex CLI：
+
+```powershell
+npm install -g @openai/codex
+```
+
 检查安装：
 
 ```powershell
 codex --version
 ```
-
-OpenAI 当前提供原生 Windows PowerShell 安装脚本；也可以通过 npm 安装 Codex CLI。
 
 通过 npm 安装时，实际入口通常是 `codex.cmd`。`codex-pal` 在 Windows 上会自动把默认名称 `codex` 解析为 `codex.cmd` 或 `codex.exe`，通常不需要额外配置。可以使用以下命令查看实际入口：
 
