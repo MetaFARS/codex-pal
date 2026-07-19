@@ -2,7 +2,7 @@
 name = "codex-pal"
 version = "0.2.0"
 edition = "2024"
-description = "Launch Codex CLI through codex-relay for OpenAI-compatible model providers"
+description = "Run Codex CLI with OpenAI-compatible providers and orchestrate profile-based agents from Python"
 license = "MIT"
 repository = "https://github.com/MetaFARS/codex-pal"
 homepage = "https://github.com/MetaFARS/codex-pal"

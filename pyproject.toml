@@ -4,7 +4,7 @@ build-backend = "maturin"
 
 [project]
 name = "codex-pal"
-description = "Launch Codex CLI through codex-relay for OpenAI-compatible model providers"
+description = "Run Codex CLI with OpenAI-compatible providers and orchestrate profile-based agents from Python"
 readme = "README.md"
 requires-python = ">=3.11"
 license = "MIT"

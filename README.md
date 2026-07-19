@@ -1,49 +1,155 @@
 # codex-pal
 
-`codex-pal` launches Codex CLI through
-[`codex-relay`](https://github.com/MetaFARS/codex-relay) so Codex can use
-OpenAI-compatible providers that do not natively implement the Responses API.
+[![PyPI](https://img.shields.io/pypi/v/codex-pal)](https://pypi.org/project/codex-pal/)
+[![crates.io](https://img.shields.io/crates/v/codex-pal)](https://crates.io/crates/codex-pal)
+[![CI](https://github.com/MetaFARS/codex-pal/actions/workflows/CI.yml/badge.svg)](https://github.com/MetaFARS/codex-pal/actions/workflows/CI.yml)
+[![License](https://img.shields.io/badge/license-MIT-blue.svg)](https://github.com/MetaFARS/codex-pal/blob/main/LICENSE)
 
-It is intentionally a small launcher:
+**Bring your models to Codex—from one-command profiles to
+Python-orchestrated multi-agent workflows.**
 
-- starts or reuses a local `codex-relay` sidecar;
-- injects per-invocation Codex config with `-c`, leaving `~/.codex/config.toml` untouched;
-- maps common providers to upstream URLs and API-key environment variables;
-- hands the terminal to `codex`.
+`codex-pal` lets Codex CLI use OpenAI-compatible Chat Completions providers
+through [`codex-relay`](https://github.com/MetaFARS/codex-relay). For everyday
+use, it is a small profile-based launcher that leaves your global Codex
+configuration untouched. For automation, the same profiles can be composed as
+asynchronous Python agents.
+
+## Why codex-pal?
+
+- **Native Codex experience** — keep the normal terminal UI, tools, sandbox,
+  project context, and `codex exec --json` protocol.
+- **No global config changes** — provider settings are injected per invocation;
+  `~/.codex/config.toml` remains untouched.
+- **Reusable provider profiles** — keep model, relay, approval, sandbox, and
+  context settings under memorable names.
+- **Safe multi-provider relays** — managed relays are serialized and identified
+  by configuration, so one profile cannot silently use another provider.
+- **Thin Python orchestration** — run profiles sequentially or concurrently
+  without introducing another agent runtime or Python dependency stack.
+
+## Quick start
+
+Codex CLI must already be installed and available on `PATH`.
+
+### One provider, one command
+
+```bash
+pipx install codex-pal
+
+export DEEPSEEK_API_KEY=...
+codex-pal deepseek
+```
+
+The first launch creates a reusable `deepseek` profile and then hands the
+terminal to Codex. The same pattern works for `kimi`, `qwen`, `zai`, `mistral`,
+`groq`, `xai`, and `openrouter`.
+
+### Multiple models, programmable agents
+
+Install `codex-pal` into the Python environment running the orchestrator:
+
+```bash
+python -m pip install codex-pal
+
+export MOONSHOT_API_KEY=...
+export DASHSCOPE_API_KEY=...
+
+codex-pal architect config \
+  --provider kimi \
+  --model kimi-k3 \
+  --port 4444 \
+  --sandbox read-only
+
+codex-pal reviewer config \
+  --provider qwen \
+  --model qwen3.7-max \
+  --port 4445 \
+  --sandbox read-only
+```
+
+```python
+import asyncio
+from pathlib import Path
+
+from codex_pal import Agent, AgentTask, run_parallel
+
+
+async def main():
+    repo = Path("/path/to/project")
+    results = await run_parallel([
+        AgentTask(
+            Agent("architect", cwd=repo),
+            "Map the architecture and propose an implementation plan. Do not edit files.",
+        ),
+        AgentTask(
+            Agent("reviewer", cwd=repo),
+            "Find high-confidence correctness issues. Do not edit files.",
+        ),
+    ])
+    for result in results:
+        print(result.profile, result.events)
+
+
+asyncio.run(main())
+```
+
+See the [Python Multi-Agent API](https://github.com/MetaFARS/codex-pal/blob/main/PYTHON_API.md)
+for staged workflows, worktree isolation, event handling, custom providers, and
+the complete API reference.
+
+## How it works
+
+```text
+Profile (provider, model, policy)
+              |
+              v
+         codex-pal
+          /      \
+         v        v
+   Codex CLI -> codex-relay -> model provider
+   native UX    Responses-to-Chat bridge
+```
+
+For each launch, `codex-pal` starts or reuses the appropriate relay, injects
+Codex configuration with `-c`, and then runs Codex directly. Relay-backed
+providers also get a temporary model catalog so Codex's `/model` picker lists
+provider-specific models.
+
+Managed local relays record their upstream identity. Concurrent launches are
+serialized per port, and a differently configured profile is rejected instead
+of being routed to the wrong provider. Remote relays remain available through
+`--relay-url`.
 
 ## Install
 
-From crates.io:
+### PyPI
 
-```bash
-cargo install codex-pal
-```
-
-From PyPI:
+For CLI use:
 
 ```bash
 pipx install codex-pal
 ```
 
-The PyPI package installs `codex-relay` as a runtime dependency. `codex-pal`
-finds that dependency beside its own executable (including in pipx's private
-environment) before searching `PATH`. To expose `codex-relay` as a standalone
-shell command too, install with `pipx install codex-pal --include-deps`.
+For the Python API, install into your application environment:
 
-The Cargo package also declares the `codex-relay` crate dependency, but Cargo
-does not install dependency binaries onto `PATH` when installing a binary
-crate; if you install with Cargo, install both tools:
+```bash
+python -m pip install codex-pal
+```
+
+The PyPI package installs `codex-relay` as a runtime dependency. `codex-pal`
+finds that dependency beside its own executable—including inside pipx's private
+environment—before searching `PATH`. To expose `codex-relay` as a standalone
+command too, use `pipx install codex-pal --include-deps`.
+
+### crates.io
+
+Cargo does not install dependency binaries onto `PATH`, so install both tools:
 
 ```bash
 cargo install codex-pal codex-relay
 ```
 
-## Usage
-
-`codex-pal` has two interfaces:
-
-- a complete, explicit interface for scripts and debugging;
-- a profile interface for humans.
+## Profiles and CLI usage
 
 ### Human-friendly profiles
 
@@ -119,6 +225,8 @@ codex-pal run --provider deepseek --model deepseek-v4-pro --ask
 codex-pal run --provider deepseek --model deepseek-v4-pro --no-sandbox
 ```
 
+### Remote relays
+
 Use an existing remote `codex-relay` service instead of starting a local sidecar:
 
 ```bash
@@ -134,6 +242,8 @@ codex-pal deepseek config --relay-url https://relay.example.com
 `--relay-url` accepts either the relay root URL or its `/v1` base URL. When it
 is set, `codex-pal` skips local relay process management and points Codex at
 the remote relay.
+
+### Forwarding Codex commands
 
 Arguments left after `codex-pal` consumes its profile or launch options are
 appended to the `codex` invocation, so Codex subcommands and flags can be used
@@ -154,56 +264,24 @@ codex-pal deepseek -- --model gpt-5.5
 
 ## Python multi-agent API
 
-The PyPI package also includes a small, standard-library-only asyncio wrapper.
-Each `Agent` uses an existing codex-pal profile, so the normal CLI and profile
-configuration remain the source of truth:
-
-See [Python Multi-Agent API](PYTHON_API.md) for profile setup, API details,
-worktree guidance, and complete parallel and staged orchestration examples.
+The PyPI package includes a standard-library-only asyncio wrapper. Each `Agent`
+uses an existing profile, keeping CLI and Python configuration in one place:
 
 ```python
-import asyncio
+from codex_pal import Agent
 
-from codex_pal import Agent, AgentTask, run_parallel
-
-
-async def main():
-    tasks = [
-        AgentTask(
-            Agent("architect", cwd="/tmp/project-architect", port=4444),
-            "Analyze the repository and produce an implementation plan.",
-        ),
-        AgentTask(
-            Agent("reviewer", cwd="/tmp/project-reviewer", port=4445),
-            "Review the current implementation and report high-confidence issues.",
-        ),
-    ]
-    results = await run_parallel(tasks)
-    for result in results:
-        for event in result.events:
-            print(result.profile, event)
-
-
-asyncio.run(main())
+result = await Agent("architect", cwd="/path/to/project").run(
+    "Analyze this repository and propose a refactoring plan. Do not edit files."
+)
 ```
 
 `Agent.run()` invokes the equivalent of `codex-pal <profile> exec --json -`,
 sends the prompt over stdin, and returns decoded JSONL events. `cwd` can point
-at a separate Git worktree for each writing agent. An explicit `port` overrides
-the profile for that run; omit it to use the profile's configured port. Parallel
-tasks are independent: `run_parallel()` lets every started Agent finish before
-surfacing an Agent error, rather than terminating another Agent mid-change.
+at a separate Git worktree for each writing agent. `run_parallel()` composes
+independent profiles without replacing Codex or introducing a second agent
+runtime.
 
-Configure different local relay ports for profiles that use different
-providers. Managed relays record their upstream identity, and codex-pal now
-rejects accidental reuse of a port by a differently configured profile instead
-of silently sending that profile to the wrong provider.
-
-For relay-backed providers, `codex-pal` also injects a temporary Codex
-`model_catalog_json` file so the in-session `/model` picker lists models for the
-selected provider instead of only Codex's bundled OpenAI catalog. If Codex's
-catalog command is unavailable, launch still continues with the chosen `-m`
-model and prints a warning.
+Read the full [Python Multi-Agent API guide](https://github.com/MetaFARS/codex-pal/blob/main/PYTHON_API.md).
 
 ## Provider Profiles
 
