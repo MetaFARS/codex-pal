@@ -82,5 +82,8 @@ fn providers_lists_current_default_models() {
     assert!(output.status.success());
     let stdout = String::from_utf8(output.stdout).unwrap();
     assert!(stdout.contains("deepseek\tdefault_model=deepseek-v4-pro"));
+    assert!(stdout.contains("z\tdefault_model=glm-5.2"));
+    assert!(stdout.contains("zai\tdefault_model=glm-5.2"));
+    assert!(stdout.contains("kimi\tdefault_model=kimi-k3"));
     assert!(stdout.contains("openrouter\tdefault_model=openrouter/auto"));
 }

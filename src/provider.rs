@@ -11,6 +11,8 @@ pub struct ProviderModel {
 pub const BUILTIN_PROVIDERS: &[&str] = &[
     "openai",
     "deepseek",
+    "z",
+    "zai",
     "kimi",
     "moonshot",
     "qwen",
@@ -64,6 +66,7 @@ fn provider_defaults(provider: &str) -> Result<(&'static str, &'static str)> {
     match provider {
         "openai" => Ok(("https://api.openai.com/v1", "OPENAI_API_KEY")),
         "deepseek" => Ok(("https://api.deepseek.com/v1", "DEEPSEEK_API_KEY")),
+        "z" | "zai" => Ok(("https://api.z.ai/api/paas/v4", "ZAI_API_KEY")),
         "kimi" | "moonshot" => Ok(("https://api.moonshot.cn/v1", "MOONSHOT_API_KEY")),
         "qwen" | "dashscope" => Ok((
             "https://dashscope.aliyuncs.com/compatible-mode/v1",
@@ -98,6 +101,7 @@ pub fn default_model(provider: &str) -> Option<&'static str> {
 pub fn provider_models(provider: &str) -> &'static [ProviderModel] {
     match provider.trim().to_ascii_lowercase().as_str() {
         "deepseek" => &DEEPSEEK_MODELS,
+        "z" | "zai" => &ZAI_MODELS,
         "kimi" | "moonshot" => &KIMI_MODELS,
         "qwen" | "dashscope" => &QWEN_MODELS,
         "mistral" => &MISTRAL_MODELS,
@@ -111,19 +115,32 @@ pub fn provider_models(provider: &str) -> &'static [ProviderModel] {
 const DEEPSEEK_MODELS: [ProviderModel; 2] = [
     ProviderModel {
         slug: "deepseek-v4-pro",
-        display_name: "DeepSeek V4 Pro",
+        display_name: "DeepSeek-V4-Pro",
         description: "DeepSeek frontier model with thinking mode, 1M context, JSON output, and tool calls.",
         context_window: 1_000_000,
     },
     ProviderModel {
         slug: "deepseek-v4-flash",
-        display_name: "DeepSeek V4 Flash",
+        display_name: "DeepSeek-V4-Flash",
         description: "DeepSeek faster V4 model with thinking mode, 1M context, JSON output, and tool calls.",
         context_window: 1_000_000,
     },
 ];
 
-const KIMI_MODELS: [ProviderModel; 3] = [
+const ZAI_MODELS: [ProviderModel; 1] = [ProviderModel {
+    slug: "glm-5.2",
+    display_name: "GLM-5.2",
+    description: "Z.ai's flagship model for coding and long-horizon tasks with configurable reasoning effort.",
+    context_window: 1_000_000,
+}];
+
+const KIMI_MODELS: [ProviderModel; 4] = [
+    ProviderModel {
+        slug: "kimi-k3",
+        display_name: "Kimi K3",
+        description: "Kimi's flagship model for long-horizon coding, knowledge work, and reasoning.",
+        context_window: 1_000_000,
+    },
     ProviderModel {
         slug: "kimi-k2.7-code",
         display_name: "Kimi K2.7 Code",
@@ -251,6 +268,24 @@ mod tests {
         assert_eq!(profile.upstream, "https://api.deepseek.com/v1");
         assert_eq!(profile.api_key_env, "DEEPSEEK_API_KEY");
         assert!(profile.needs_relay());
+    }
+
+    #[test]
+    fn resolves_zai_aliases_and_current_default_models() {
+        for provider in ["z", "zai"] {
+            let args = crate::cli::ProviderArgs {
+                provider: provider.to_string(),
+                upstream: None,
+                api_key_env: None,
+                api_key: None,
+            };
+            let profile = ProviderProfile::resolve(&args).unwrap();
+            assert_eq!(profile.upstream, "https://api.z.ai/api/paas/v4");
+            assert_eq!(profile.api_key_env, "ZAI_API_KEY");
+            assert_eq!(default_model(provider), Some("glm-5.2"));
+        }
+        assert_eq!(default_model("deepseek"), Some("deepseek-v4-pro"));
+        assert_eq!(default_model("kimi"), Some("kimi-k3"));
     }
 
     #[test]

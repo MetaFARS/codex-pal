@@ -163,6 +163,7 @@ model and prints a warning.
 | Provider | Upstream | API key env |
 | --- | --- | --- |
 | `deepseek` | `https://api.deepseek.com/v1` | `DEEPSEEK_API_KEY` |
+| `z`, `zai` | `https://api.z.ai/api/paas/v4` | `ZAI_API_KEY` |
 | `kimi`, `moonshot` | `https://api.moonshot.cn/v1` | `MOONSHOT_API_KEY` |
 | `qwen`, `dashscope` | `https://dashscope.aliyuncs.com/compatible-mode/v1` | `DASHSCOPE_API_KEY` |
 | `mistral` | `https://api.mistral.ai/v1` | `MISTRAL_API_KEY` |
@@ -176,7 +177,8 @@ Default models:
 | --- | --- |
 | `openai` | `gpt-5.5` |
 | `deepseek` | `deepseek-v4-pro` |
-| `kimi`, `moonshot` | `kimi-k2.7-code` |
+| `z`, `zai` | `glm-5.2` |
+| `kimi`, `moonshot` | `kimi-k3` |
 | `qwen`, `dashscope` | `qwen3.7-max` |
 | `mistral` | `mistral-medium-3-5+2` |
 | `groq` | `openai/gpt-oss-120b` |

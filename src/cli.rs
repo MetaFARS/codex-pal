@@ -139,7 +139,7 @@ pub struct LaunchOptions {
 
 #[derive(Debug, Args, Clone)]
 pub struct ProviderArgs {
-    /// Provider profile: deepseek, kimi, moonshot, qwen, mistral, groq, xai, openrouter, or openai.
+    /// Provider profile: deepseek, z, zai, kimi, moonshot, qwen, mistral, groq, xai, openrouter, or openai.
     #[arg(long, env = "CODEX_PAL_PROVIDER", default_value = "openrouter")]
     pub provider: String,
 

@@ -1,6 +1,6 @@
 # Installing codex-pal
 
-`codex-pal` enables OpenAI Codex CLI to use DeepSeek, Kimi, Qwen, Mistral, Groq, xAI, OpenRouter, and other model providers compatible with the OpenAI Chat Completions API.
+`codex-pal` enables OpenAI Codex CLI to use DeepSeek, Z.ai, Kimi, Qwen, Mistral, Groq, xAI, OpenRouter, and other model providers compatible with the OpenAI Chat Completions API.
 
 Most users only need to install `codex-pal`. A compatible version of `codex-relay` is installed automatically, so the two programs do not need to be managed separately.
 
@@ -19,7 +19,7 @@ Current release targets include:
 * Linux: glibc x86_64/ARM64 and musl x86_64/ARM64;
 * Windows: x86_64 and ARM64.
 
-Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.1.5` and `codex-relay 0.5.4`.
+Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.1.6` and `codex-relay 0.5.4`.
 
 ---
 
@@ -94,25 +94,25 @@ codex-pal providers
 
 ### 4. Configure and launch
 
-For DeepSeek:
+For DeepSeek-V4-Pro:
 
 ```bash
 export DEEPSEEK_API_KEY="your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-For Qwen:
+For GLM-5.2 through Z.ai:
 
 ```bash
-export DASHSCOPE_API_KEY="your-api-key"
-codex-pal qwen
+export ZAI_API_KEY="your-api-key"
+codex-pal z --model glm-5.2
 ```
 
-For OpenRouter:
+For Kimi K3:
 
 ```bash
-export OPENROUTER_API_KEY="your-api-key"
-codex-pal openrouter
+export MOONSHOT_API_KEY="your-api-key"
+codex-pal kimi --model kimi-k3
 ```
 
 The first time you run a built-in provider, `codex-pal` creates a corresponding local profile that can be reused on subsequent runs.
@@ -187,32 +187,25 @@ The release process provides x86_64 and ARM64 wheels for both Linux glibc and mu
 
 ### 4. Configure a model provider
 
-DeepSeek:
+DeepSeek-V4-Pro:
 
 ```bash
 export DEEPSEEK_API_KEY="your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-Kimi:
+GLM-5.2 through Z.ai:
+
+```bash
+export ZAI_API_KEY="your-api-key"
+codex-pal z --model glm-5.2
+```
+
+Kimi K3:
 
 ```bash
 export MOONSHOT_API_KEY="your-api-key"
-codex-pal kimi
-```
-
-Qwen:
-
-```bash
-export DASHSCOPE_API_KEY="your-api-key"
-codex-pal qwen
-```
-
-OpenRouter:
-
-```bash
-export OPENROUTER_API_KEY="your-api-key"
-codex-pal openrouter
+codex-pal kimi --model kimi-k3
 ```
 
 ---
@@ -316,25 +309,25 @@ py -m pipx ensurepath
 
 ### 5. Configure and launch
 
-DeepSeek:
+DeepSeek-V4-Pro:
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-Qwen:
+GLM-5.2 through Z.ai:
 
 ```powershell
-$env:DASHSCOPE_API_KEY = "your-api-key"
-codex-pal qwen
+$env:ZAI_API_KEY = "your-api-key"
+codex-pal z --model glm-5.2
 ```
 
-OpenRouter:
+Kimi K3:
 
 ```powershell
-$env:OPENROUTER_API_KEY = "your-api-key"
-codex-pal openrouter
+$env:MOONSHOT_API_KEY = "your-api-key"
+codex-pal kimi --model kimi-k3
 ```
 
 These environment variables apply only to the current PowerShell session. The API keys are not preserved after you close the window.

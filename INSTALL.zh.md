@@ -1,6 +1,6 @@
 # 安装 codex-pal
 
-`codex-pal` 让 OpenAI Codex CLI 可以使用 DeepSeek、Kimi、Qwen、Mistral、Groq、xAI、OpenRouter，以及其他兼容 OpenAI Chat Completions API 的模型服务。
+`codex-pal` 让 OpenAI Codex CLI 可以使用 DeepSeek、Z.ai、Kimi、Qwen、Mistral、Groq、xAI、OpenRouter，以及其他兼容 OpenAI Chat Completions API 的模型服务。
 
 普通用户只需安装 `codex-pal`。安装过程中会自动安装匹配版本的 `codex-relay`，不需要分别管理两个程序。
 
@@ -19,7 +19,7 @@
 * Linux：glibc x86_64/ARM64、musl x86_64/ARM64；
 * Windows：x86_64、ARM64。
 
-`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.1.5` 和 `codex-relay 0.5.4`。
+`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.1.6` 和 `codex-relay 0.5.4`。
 
 ---
 
@@ -94,25 +94,25 @@ codex-pal providers
 
 ### 4. 配置并启动
 
-以 DeepSeek 为例：
+以 DeepSeek-V4-Pro 为例：
 
 ```bash
 export DEEPSEEK_API_KEY="your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-以 Qwen 为例：
+以 Z.ai 的 GLM-5.2 为例：
 
 ```bash
-export DASHSCOPE_API_KEY="your-api-key"
-codex-pal qwen
+export ZAI_API_KEY="your-api-key"
+codex-pal z --model glm-5.2
 ```
 
-以 OpenRouter 为例：
+以 Kimi K3 为例：
 
 ```bash
-export OPENROUTER_API_KEY="your-api-key"
-codex-pal openrouter
+export MOONSHOT_API_KEY="your-api-key"
+codex-pal kimi --model kimi-k3
 ```
 
 第一次运行内置 provider 时，`codex-pal` 会创建对应的本地 profile；以后可以直接重复使用。
@@ -187,32 +187,25 @@ codex-pal providers
 
 ### 4. 配置模型服务
 
-DeepSeek：
+DeepSeek-V4-Pro：
 
 ```bash
 export DEEPSEEK_API_KEY="your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-Kimi：
+Z.ai GLM-5.2：
+
+```bash
+export ZAI_API_KEY="your-api-key"
+codex-pal z --model glm-5.2
+```
+
+Kimi K3：
 
 ```bash
 export MOONSHOT_API_KEY="your-api-key"
-codex-pal kimi
-```
-
-Qwen：
-
-```bash
-export DASHSCOPE_API_KEY="your-api-key"
-codex-pal qwen
-```
-
-OpenRouter：
-
-```bash
-export OPENROUTER_API_KEY="your-api-key"
-codex-pal openrouter
+codex-pal kimi --model kimi-k3
 ```
 
 ---
@@ -316,25 +309,25 @@ py -m pipx ensurepath
 
 ### 5. 配置并启动
 
-DeepSeek：
+DeepSeek-V4-Pro：
 
 ```powershell
 $env:DEEPSEEK_API_KEY = "your-api-key"
-codex-pal deepseek
+codex-pal deepseek --model deepseek-v4-pro
 ```
 
-Qwen：
+Z.ai GLM-5.2：
 
 ```powershell
-$env:DASHSCOPE_API_KEY = "your-api-key"
-codex-pal qwen
+$env:ZAI_API_KEY = "your-api-key"
+codex-pal z --model glm-5.2
 ```
 
-OpenRouter：
+Kimi K3：
 
 ```powershell
-$env:OPENROUTER_API_KEY = "your-api-key"
-codex-pal openrouter
+$env:MOONSHOT_API_KEY = "your-api-key"
+codex-pal kimi --model kimi-k3
 ```
 
 以上环境变量只在当前 PowerShell 会话中有效。关闭窗口后不会保留 API Key。
