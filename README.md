@@ -152,6 +152,53 @@ it looks like a `codex-pal` option:
 codex-pal deepseek -- --model gpt-5.5
 ```
 
+## Python multi-agent API
+
+The PyPI package also includes a small, standard-library-only asyncio wrapper.
+Each `Agent` uses an existing codex-pal profile, so the normal CLI and profile
+configuration remain the source of truth:
+
+See [Python Multi-Agent API](PYTHON_API.md) for profile setup, API details,
+worktree guidance, and complete parallel and staged orchestration examples.
+
+```python
+import asyncio
+
+from codex_pal import Agent, AgentTask, run_parallel
+
+
+async def main():
+    tasks = [
+        AgentTask(
+            Agent("architect", cwd="/tmp/project-architect", port=4444),
+            "Analyze the repository and produce an implementation plan.",
+        ),
+        AgentTask(
+            Agent("reviewer", cwd="/tmp/project-reviewer", port=4445),
+            "Review the current implementation and report high-confidence issues.",
+        ),
+    ]
+    results = await run_parallel(tasks)
+    for result in results:
+        for event in result.events:
+            print(result.profile, event)
+
+
+asyncio.run(main())
+```
+
+`Agent.run()` invokes the equivalent of `codex-pal <profile> exec --json -`,
+sends the prompt over stdin, and returns decoded JSONL events. `cwd` can point
+at a separate Git worktree for each writing agent. An explicit `port` overrides
+the profile for that run; omit it to use the profile's configured port. Parallel
+tasks are independent: `run_parallel()` lets every started Agent finish before
+surfacing an Agent error, rather than terminating another Agent mid-change.
+
+Configure different local relay ports for profiles that use different
+providers. Managed relays record their upstream identity, and codex-pal now
+rejects accidental reuse of a port by a differently configured profile instead
+of silently sending that profile to the wrong provider.
+
 For relay-backed providers, `codex-pal` also injects a temporary Codex
 `model_catalog_json` file so the in-session `/model` picker lists models for the
 selected provider instead of only Codex's bundled OpenAI catalog. If Codex's

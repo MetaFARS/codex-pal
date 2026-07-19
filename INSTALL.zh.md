@@ -19,7 +19,7 @@
 * Linux：glibc x86_64/ARM64、musl x86_64/ARM64；
 * Windows：x86_64、ARM64。
 
-`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.1.6` 和 `codex-relay 0.5.4`。
+`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.2.0` 和 `codex-relay 0.5.4`。
 
 ---
 

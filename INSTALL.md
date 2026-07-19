@@ -19,7 +19,7 @@ Current release targets include:
 * Linux: glibc x86_64/ARM64 and musl x86_64/ARM64;
 * Windows: x86_64 and ARM64.
 
-Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.1.6` and `codex-relay 0.5.4`.
+Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.2.0` and `codex-relay 0.5.4`.
 
 ---
 

@@ -36,6 +36,8 @@ Issues = "https://github.com/MetaFARS/codex-pal/issues"
 
 [tool.maturin]
 bindings = "bin"
+python-source = "python"
+module-name = "codex_pal"
 exclude = [
     "**/__pycache__",
     "**/*.pyc",

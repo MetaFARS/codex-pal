@@ -2,11 +2,13 @@ use std::fmt;
 use std::fs::{self, File};
 use std::net::{SocketAddr, TcpStream};
 use std::path::{Path, PathBuf};
-use std::process::{Command, Stdio};
+use std::process::{Child, Command, Stdio};
 use std::thread;
 use std::time::{Duration, Instant};
 
 use anyhow::{Context, Result, bail};
+use fs2::FileExt;
+use serde::{Deserialize, Serialize};
 
 use crate::provider::ProviderProfile;
 
@@ -18,6 +20,68 @@ pub struct RelayRequest {
     pub relay_bin: String,
     pub provider: ProviderProfile,
     pub port: u16,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq, Serialize, Deserialize)]
+struct RelayMetadata {
+    pid: Option<u32>,
+    port: u16,
+    upstream: String,
+    api_key_env: String,
+}
+
+impl RelayMetadata {
+    fn new(pid: Option<u32>, request: &RelayRequest) -> Self {
+        Self {
+            pid,
+            port: request.port,
+            upstream: request.provider.upstream.clone(),
+            api_key_env: request.provider.api_key_env.clone(),
+        }
+    }
+
+    fn matches(&self, request: &RelayRequest) -> bool {
+        self.port == request.port
+            && self.upstream == request.provider.upstream
+            && self.api_key_env == request.provider.api_key_env
+    }
+}
+
+struct RelayReservation {
+    metadata_path: PathBuf,
+    pid_path: PathBuf,
+    committed: bool,
+}
+
+impl RelayReservation {
+    fn create(request: &RelayRequest, pid_path: PathBuf) -> Result<Self> {
+        let metadata_path = metadata_file(request.port)?;
+        write_metadata(&RelayMetadata::new(None, request))?;
+        Ok(Self {
+            metadata_path,
+            pid_path,
+            committed: false,
+        })
+    }
+
+    fn record_pid(&self, pid: u32, request: &RelayRequest) -> Result<()> {
+        fs::write(&self.pid_path, pid.to_string())
+            .with_context(|| format!("writing relay pid {}", self.pid_path.display()))?;
+        write_metadata(&RelayMetadata::new(Some(pid), request))
+    }
+
+    fn commit(mut self) {
+        self.committed = true;
+    }
+}
+
+impl Drop for RelayReservation {
+    fn drop(&mut self) {
+        if !self.committed {
+            let _ = fs::remove_file(&self.pid_path);
+            let _ = fs::remove_file(&self.metadata_path);
+        }
+    }
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -42,23 +106,58 @@ impl fmt::Display for RelayState {
 }
 
 pub fn ensure_relay(request: &RelayRequest) -> Result<RelayState> {
+    let _lock = lock_port(request.port)?;
     let pid_file = pid_file(request.port)?;
     let log_file = log_file(request.port)?;
     let existing_pid = read_pid(&pid_file);
-    if existing_pid.is_some() && port_in_use(request.port) {
-        return Ok(RelayState::AlreadyRunning {
-            pid: existing_pid,
-            port: request.port,
-        });
+    let existing_metadata = read_metadata(request.port)?;
+    if let Some(metadata) = &existing_metadata {
+        if let Some(metadata_pid) = metadata.pid
+            && Some(metadata_pid) != existing_pid
+        {
+            bail!(
+                "relay state for port {} is inconsistent; stop the existing relay and retry",
+                request.port
+            );
+        }
+        if !metadata.matches(request) {
+            bail!(
+                "relay on port {} is configured for upstream {:?} with API key environment variable {:?}, not upstream {:?} with {:?}; use a different --port or stop the existing relay",
+                request.port,
+                metadata.upstream,
+                metadata.api_key_env,
+                request.provider.upstream,
+                request.provider.api_key_env,
+            );
+        }
     }
     if port_in_use(request.port) {
+        if existing_metadata.is_some() || existing_pid.is_some() {
+            return Ok(RelayState::AlreadyRunning {
+                pid: existing_metadata
+                    .and_then(|metadata| metadata.pid)
+                    .or(existing_pid),
+                port: request.port,
+            });
+        }
         return Ok(RelayState::AlreadyRunning {
             pid: None,
             port: request.port,
         });
     }
-    let relay_bin = resolve_relay_bin(&request.relay_bin)?;
+    if existing_metadata.is_some() {
+        bail!(
+            "relay on port {} has an incomplete or stale startup reservation; run `codex-pal relay stop --port {}` and retry",
+            request.port,
+            request.port
+        );
+    }
+    if existing_pid.is_some() {
+        let _ = fs::remove_file(&pid_file);
+    }
 
+    let reservation = RelayReservation::create(request, pid_file)?;
+    let relay_bin = resolve_relay_bin(&request.relay_bin)?;
     let log = File::create(&log_file)
         .with_context(|| format!("creating relay log {}", log_file.display()))?;
     let log_err = log
@@ -83,27 +182,22 @@ pub fn ensure_relay(request: &RelayRequest) -> Result<RelayState> {
     let mut child = cmd
         .spawn()
         .with_context(|| format!("starting {}", relay_bin.display()))?;
-    fs::write(&pid_file, child.id().to_string())
-        .with_context(|| format!("writing relay pid {}", pid_file.display()))?;
-
-    if wait_healthy(request.port) {
-        return Ok(RelayState::Started {
-            pid: child.id(),
-            port: request.port,
-        });
+    let pid = child.id();
+    if let Err(error) = reservation.record_pid(pid, request) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
     }
-    if let Some(status) = child.try_wait()? {
-        bail!(
-            "codex-relay exited immediately with {status}; check {}",
-            log_file.display()
-        );
+    if let Err(error) = wait_healthy(&mut child, request.port, &log_file) {
+        let _ = child.kill();
+        let _ = child.wait();
+        return Err(error);
     }
-    bail!(
-        "codex-relay did not become healthy on port {} within {:?}; check {}",
-        request.port,
-        HEALTH_TIMEOUT,
-        log_file.display()
-    );
+    reservation.commit();
+    Ok(RelayState::Started {
+        pid,
+        port: request.port,
+    })
 }
 
 pub fn relay_status(port: u16) -> String {
@@ -118,12 +212,26 @@ pub fn relay_status(port: u16) -> String {
 }
 
 pub fn stop_relay(port: u16) -> Result<String> {
+    let _lock = lock_port(port)?;
     let path = pid_file(port)?;
     let Some(pid) = read_pid(&path) else {
+        if port_in_use(port) && read_metadata(port)?.is_some() {
+            bail!(
+                "relay on port {port} has managed configuration state but no PID; refusing to clear it while the port is active"
+            );
+        }
+        let _ = fs::remove_file(metadata_file(port)?);
         return Ok(format!("not running port={port}"));
     };
     terminate_pid(pid)?;
+    if !wait_port_released(port) {
+        bail!(
+            "relay pid={pid} did not release port {port} within {:?}; preserving relay state",
+            HEALTH_TIMEOUT
+        );
+    }
     let _ = fs::remove_file(path);
+    let _ = fs::remove_file(metadata_file(port)?);
     Ok(format!("stopped pid={pid} port={port}"))
 }
 
@@ -236,10 +344,38 @@ fn port_in_use(port: u16) -> bool {
     TcpStream::connect_timeout(&addr, Duration::from_millis(500)).is_ok()
 }
 
-fn wait_healthy(port: u16) -> bool {
+fn wait_healthy(child: &mut Child, port: u16, log_file: &Path) -> Result<()> {
     let deadline = Instant::now() + HEALTH_TIMEOUT;
     while Instant::now() < deadline {
+        if let Some(status) = child.try_wait()? {
+            bail!(
+                "codex-relay exited immediately with {status}; check {}",
+                log_file.display()
+            );
+        }
         if port_in_use(port) {
+            if let Some(status) = child.try_wait()? {
+                bail!(
+                    "codex-relay exited immediately with {status}; check {}",
+                    log_file.display()
+                );
+            }
+            return Ok(());
+        }
+        thread::sleep(HEALTH_POLL);
+    }
+    bail!(
+        "codex-relay did not become healthy on port {} within {:?}; check {}",
+        port,
+        HEALTH_TIMEOUT,
+        log_file.display()
+    )
+}
+
+fn wait_port_released(port: u16) -> bool {
+    let deadline = Instant::now() + HEALTH_TIMEOUT;
+    while Instant::now() < deadline {
+        if !port_in_use(port) {
             return true;
         }
         thread::sleep(HEALTH_POLL);
@@ -269,6 +405,42 @@ fn pid_file(port: u16) -> Result<PathBuf> {
 
 fn log_file(port: u16) -> Result<PathBuf> {
     Ok(state_dir()?.join(format!("codex-relay-{port}.log")))
+}
+
+fn lock_port(port: u16) -> Result<File> {
+    let path = state_dir()?.join(format!("codex-relay-{port}.lock"));
+    let file = File::options()
+        .read(true)
+        .write(true)
+        .create(true)
+        .truncate(false)
+        .open(&path)
+        .with_context(|| format!("opening relay lock {}", path.display()))?;
+    file.lock_exclusive()
+        .with_context(|| format!("locking relay port {port}"))?;
+    Ok(file)
+}
+
+fn metadata_file(port: u16) -> Result<PathBuf> {
+    Ok(state_dir()?.join(format!("codex-relay-{port}.json")))
+}
+
+fn read_metadata(port: u16) -> Result<Option<RelayMetadata>> {
+    let path = metadata_file(port)?;
+    if !path.exists() {
+        return Ok(None);
+    }
+    let contents =
+        fs::read_to_string(&path).with_context(|| format!("reading {}", path.display()))?;
+    serde_json::from_str(&contents)
+        .with_context(|| format!("parsing {}", path.display()))
+        .map(Some)
+}
+
+fn write_metadata(metadata: &RelayMetadata) -> Result<()> {
+    let path = metadata_file(metadata.port)?;
+    let contents = serde_json::to_vec_pretty(metadata)?;
+    fs::write(&path, contents).with_context(|| format!("writing {}", path.display()))
 }
 
 fn read_pid(path: &PathBuf) -> Option<u32> {
@@ -342,6 +514,62 @@ mod tests {
                     .join(format!("codex-relay{}", std::env::consts::EXE_SUFFIX))
             )
         );
+    }
+
+    #[test]
+    fn relay_metadata_matches_relay_configuration_not_profile_alias() {
+        let request = RelayRequest {
+            relay_bin: "codex-relay".to_string(),
+            provider: ProviderProfile {
+                name: "z".to_string(),
+                upstream: "https://api.z.ai/api/paas/v4".to_string(),
+                api_key_env: "ZAI_API_KEY".to_string(),
+                api_key: None,
+            },
+            port: 4444,
+        };
+        let metadata = RelayMetadata::new(Some(42), &request);
+        let alias_request = RelayRequest {
+            provider: ProviderProfile {
+                name: "zai".to_string(),
+                ..request.provider.clone()
+            },
+            ..request.clone()
+        };
+
+        assert!(metadata.matches(&alias_request));
+    }
+
+    #[test]
+    fn relay_metadata_rejects_a_different_upstream_or_key_environment() {
+        let request = RelayRequest {
+            relay_bin: "codex-relay".to_string(),
+            provider: ProviderProfile {
+                name: "deepseek".to_string(),
+                upstream: "https://api.deepseek.com/v1".to_string(),
+                api_key_env: "DEEPSEEK_API_KEY".to_string(),
+                api_key: None,
+            },
+            port: 4444,
+        };
+        let metadata = RelayMetadata::new(Some(42), &request);
+        let different_upstream = RelayRequest {
+            provider: ProviderProfile {
+                upstream: "https://llm.example.com/v1".to_string(),
+                ..request.provider.clone()
+            },
+            ..request.clone()
+        };
+        let different_key_env = RelayRequest {
+            provider: ProviderProfile {
+                api_key_env: "OTHER_API_KEY".to_string(),
+                ..request.provider.clone()
+            },
+            ..request.clone()
+        };
+
+        assert!(!metadata.matches(&different_upstream));
+        assert!(!metadata.matches(&different_key_env));
     }
 
     #[cfg(windows)]
