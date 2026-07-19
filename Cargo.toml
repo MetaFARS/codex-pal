@@ -1,6 +1,6 @@
 [package]
 name = "codex-pal"
-version = "0.2.0"
+version = "0.2.1"
 edition = "2024"
 description = "Run Codex CLI with OpenAI-compatible providers and orchestrate profile-based agents from Python"
 license = "MIT"
