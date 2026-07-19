@@ -265,9 +265,9 @@ dependencies = [
 
 [[package]]
 name = "codex-relay"
-version = "0.5.4"
+version = "0.5.5"
 source = "registry+https://github.com/rust-lang/crates.io-index"
-checksum = "1724a5b6805e5982209738a2664064bec129069426add36dfa33ec39c5bd458c"
+checksum = "7db180d8556432e1d75f01137157ef7b2b1a04f0de094eca3dda1ef13c78e918"
 dependencies = [
  "anyhow",
  "async-stream",
