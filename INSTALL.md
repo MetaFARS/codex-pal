@@ -19,7 +19,7 @@ Current release targets include:
 * Linux: glibc x86_64/ARM64 and musl x86_64/ARM64;
 * Windows: x86_64 and ARM64.
 
-Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.1.4` and `codex-relay 0.5.4`.
+Both `codex-pal` and `codex-relay` require Python 3.11 or later. The current corresponding versions are `codex-pal 0.1.5` and `codex-relay 0.5.4`.
 
 ---
 
@@ -248,6 +248,14 @@ When the commands finish, close and reopen PowerShell, then verify the installat
 pipx --version
 ```
 
+`pipx 1.16.0` has a known Windows regression: if `%USERPROFILE%\.local\bin` contains executables placed there by other tools, `pipx install` may raise `UnicodeDecodeError` during post-install processing. If this happens, first install the version confirmed to work:
+
+```powershell
+py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
+```
+
+Then retry the installation. This error comes from pipx scanning a shared command directory; it does not mean that the `codex-pal` wheel or Python 3.13 is incompatible.
+
 ### 3. Install Codex CLI
 
 Use the official OpenAI PowerShell installation script:
@@ -264,6 +272,12 @@ codex --version
 
 OpenAI currently provides a native Windows PowerShell installation script. Codex CLI can also be installed through npm.
 
+When installed through npm, the actual entry point is usually `codex.cmd`. On Windows, `codex-pal` automatically resolves the default name `codex` to `codex.cmd` or `codex.exe`, so no additional configuration is normally required. To see the actual entry point, run:
+
+```powershell
+Get-Command codex -All
+```
+
 ### 4. Install codex-pal
 
 ```powershell
@@ -275,7 +289,10 @@ Verify the installation:
 ```powershell
 codex-pal --version
 codex-pal providers
+py -3.11 -m pipx runpip codex-pal show codex-relay
 ```
+
+The standard installation puts a compatible `codex-relay` version in the same private pipx environment. On Windows, it is typically located at `...\pipx\venvs\codex-pal\Scripts\codex-relay.exe`. `codex-pal` locates this file automatically, so you do not need to install `codex-relay` again or put it on the system `PATH`.
 
 If PowerShell cannot find `codex-pal` immediately, close and reopen the current window. You can also run:
 
@@ -447,6 +464,26 @@ On Windows, use:
 py -m pipx ensurepath
 ```
 
+### pipx raises `UnicodeDecodeError`
+
+If the traceback comes from `pipx\commands\common.py` and ends with `UnicodeDecodeError` near `os.fsdecode` or `_copy_launcher_targets_venv`, it is usually the known `pipx 1.16.0` issue triggered while scanning executables from other tools in `%USERPROFILE%\.local\bin`. It is not a `codex-pal` package error.
+
+Check the version first:
+
+```powershell
+py -3.11 -m pipx --version
+```
+
+If it is `1.16.0`, temporarily downgrade and reinstall:
+
+```powershell
+py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
+py -3.11 -m pipx uninstall codex-pal
+py -3.11 -m pipx install codex-pal
+```
+
+If uninstall reports that `codex-pal` is not installed, ignore that message and continue with the install command.
+
 ### Python version is too old
 
 Check the version:
@@ -473,6 +510,19 @@ codex --version
 
 If the command does not exist, install Codex CLI first.
 
+On Windows, inspect the actual entry point with:
+
+```powershell
+Get-Command codex -All
+```
+
+If the entry point is `codex.cmd`, the current version of `codex-pal` resolves it automatically. To override it explicitly, use:
+
+```powershell
+$env:CODEX_PAL_CODEX_BIN = "codex.cmd"
+codex-pal deepseek
+```
+
 ### codex-relay cannot be found
 
 With the standard installation command:
@@ -481,7 +531,13 @@ With the standard installation command:
 pipx install codex-pal
 ```
 
-`codex-relay` is installed in the same private pipx environment, and `codex-pal` locates it automatically. You only need a separate installation or the `--include-deps` option when you want to run `codex-relay` directly from the command line.
+`codex-relay` is installed in the same private pipx environment, and `codex-pal` locates it automatically. On Windows, verify that the dependency is present with:
+
+```powershell
+py -3.11 -m pipx runpip codex-pal show codex-relay
+```
+
+If this displays version information, do not install it separately. You only need a separate installation, or `pipx install codex-pal --include-deps` during the initial install, when you want to run `codex-relay` directly from the command line and expose it on `PATH`.
 
 ### Check relay status
 

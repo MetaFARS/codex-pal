@@ -19,7 +19,7 @@
 * Linux：glibc x86_64/ARM64、musl x86_64/ARM64；
 * Windows：x86_64、ARM64。
 
-`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.1.4` 和 `codex-relay 0.5.4`。
+`codex-pal` 与 `codex-relay` 均要求 Python 3.11 以上；当前对应版本为 `codex-pal 0.1.5` 和 `codex-relay 0.5.4`。
 
 ---
 
@@ -248,6 +248,14 @@ py -3.11 -m pipx ensurepath
 pipx --version
 ```
 
+`pipx 1.16.0` 在 Windows 上有一个已知回归：如果 `%USERPROFILE%\.local\bin` 中包含其他工具放置的可执行文件，`pipx install` 可能在安装后处理阶段抛出 `UnicodeDecodeError`。遇到这种情况时，请先使用已确认可用的版本：
+
+```powershell
+py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
+```
+
+然后重新执行安装。该错误来自 pipx 对共享命令目录的扫描，不表示 `codex-pal` wheel 或 Python 3.13 不兼容。
+
 ### 3. 安装 Codex CLI
 
 使用 OpenAI 官方 PowerShell 安装脚本：
@@ -264,6 +272,12 @@ codex --version
 
 OpenAI 当前提供原生 Windows PowerShell 安装脚本；也可以通过 npm 安装 Codex CLI。
 
+通过 npm 安装时，实际入口通常是 `codex.cmd`。`codex-pal` 在 Windows 上会自动把默认名称 `codex` 解析为 `codex.cmd` 或 `codex.exe`，通常不需要额外配置。可以使用以下命令查看实际入口：
+
+```powershell
+Get-Command codex -All
+```
+
 ### 4. 安装 codex-pal
 
 ```powershell
@@ -275,7 +289,10 @@ pipx install codex-pal
 ```powershell
 codex-pal --version
 codex-pal providers
+py -3.11 -m pipx runpip codex-pal show codex-relay
 ```
+
+标准安装会把兼容版本的 `codex-relay` 安装到同一个 pipx 私有环境。Windows 上它通常位于 `...\pipx\venvs\codex-pal\Scripts\codex-relay.exe`；`codex-pal` 会自动定位该文件，不需要再次独立安装 `codex-relay`，也不要求它出现在系统 `PATH` 中。
 
 如果 PowerShell 暂时找不到 `codex-pal`，关闭当前窗口并重新打开；也可以重新执行：
 
@@ -447,6 +464,26 @@ Windows 可以使用：
 py -m pipx ensurepath
 ```
 
+### pipx 抛出 `UnicodeDecodeError`
+
+如果 traceback 来自 `pipx\commands\common.py`，并在 `os.fsdecode` 或 `_copy_launcher_targets_venv` 附近以 `UnicodeDecodeError` 结束，通常是 `pipx 1.16.0` 扫描 `%USERPROFILE%\.local\bin` 中其他工具的可执行文件时触发的已知问题，不是 `codex-pal` 安装包错误。
+
+先确认版本：
+
+```powershell
+py -3.11 -m pipx --version
+```
+
+如果是 `1.16.0`，暂时降级后重装：
+
+```powershell
+py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
+py -3.11 -m pipx uninstall codex-pal
+py -3.11 -m pipx install codex-pal
+```
+
+如果卸载提示 `codex-pal` 尚未安装，可以忽略并继续执行安装命令。
+
 ### Python 版本过低
 
 检查：
@@ -473,6 +510,19 @@ codex --version
 
 如果命令不存在，请先完成 Codex CLI 的安装。
 
+Windows 可以进一步检查实际入口：
+
+```powershell
+Get-Command codex -All
+```
+
+如果入口是 `codex.cmd`，当前版本的 `codex-pal` 会自动解析。需要显式覆盖时可以使用：
+
+```powershell
+$env:CODEX_PAL_CODEX_BIN = "codex.cmd"
+codex-pal deepseek
+```
+
 ### 找不到 codex-relay
 
 使用标准的：
@@ -481,7 +531,13 @@ codex --version
 pipx install codex-pal
 ```
 
-时，`codex-relay` 已安装在同一个 pipx 私有环境中，`codex-pal` 会自行查找它。只有直接从命令行运行 `codex-relay` 时，才需要单独安装或使用 `--include-deps` 暴露该命令。
+时，`codex-relay` 已安装在同一个 pipx 私有环境中，`codex-pal` 会自行查找它。在 Windows 上检查依赖是否存在：
+
+```powershell
+py -3.11 -m pipx runpip codex-pal show codex-relay
+```
+
+如果可以显示版本信息，就不应再独立安装。只有需要直接从命令行运行 `codex-relay` 时，才需要单独安装，或者在初次安装时使用 `pipx install codex-pal --include-deps` 将依赖命令暴露到 `PATH`。
 
 ### 查看 relay 状态
 

@@ -96,14 +96,8 @@ pub struct CodexCommand {
 }
 
 pub fn build_codex_command(launch: &CodexLaunch) -> Result<CodexCommand> {
-    if which::which(&launch.codex_bin).is_err() {
-        bail!(
-            "codex binary {:?} not found in PATH; install Codex or set --codex-bin",
-            launch.codex_bin
-        );
-    }
-
-    let mut argv = vec![launch.codex_bin.clone()];
+    let codex_bin = resolve_codex_bin(&launch.codex_bin)?;
+    let mut argv = vec![codex_bin.display().to_string()];
     let mut env = Vec::new();
 
     if launch.provider.needs_relay() || launch.relay_base_url.is_some() {
@@ -260,7 +254,11 @@ impl From<&ProviderModel> for CatalogModel {
 }
 
 fn bundled_model_template(codex_bin: &str) -> Result<Value> {
-    let output = Command::new(codex_bin)
+    #[cfg(windows)]
+    let resolved_codex_bin = resolve_codex_bin(codex_bin)?;
+    #[cfg(not(windows))]
+    let resolved_codex_bin = PathBuf::from(codex_bin);
+    let output = Command::new(&resolved_codex_bin)
         .args(["debug", "models", "--bundled"])
         .output()
         .with_context(|| format!("reading bundled model catalog from {codex_bin:?}"))?;
@@ -275,6 +273,21 @@ fn bundled_model_template(codex_bin: &str) -> Result<Value> {
         .and_then(|models| models.first())
         .cloned()
         .context("bundled Codex model catalog did not contain any models")
+}
+
+#[cfg(windows)]
+fn resolve_codex_bin(codex_bin: &str) -> Result<PathBuf> {
+    which::which(codex_bin).with_context(|| {
+        format!("codex binary {codex_bin:?} not found in PATH; install Codex or set --codex-bin")
+    })
+}
+
+#[cfg(not(windows))]
+fn resolve_codex_bin(codex_bin: &str) -> Result<PathBuf> {
+    which::which(codex_bin).with_context(|| {
+        format!("codex binary {codex_bin:?} not found in PATH; install Codex or set --codex-bin")
+    })?;
+    Ok(PathBuf::from(codex_bin))
 }
 
 fn catalog_entry_from_template(
@@ -391,6 +404,45 @@ fn quoted_key(value: &str) -> String {
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[cfg(windows)]
+    #[test]
+    fn uses_resolved_codex_executable() {
+        let executable = std::env::current_exe().unwrap();
+        let launch = CodexLaunch {
+            codex_bin: executable.display().to_string(),
+            provider: ProviderProfile {
+                name: "openai".to_string(),
+                upstream: "https://api.openai.com/v1".to_string(),
+                api_key_env: "OPENAI_API_KEY".to_string(),
+                api_key: None,
+            },
+            port: 4444,
+            relay_base_url: None,
+            model: None,
+            model_catalog_json: None,
+            approval: ApprovalPolicy::Never,
+            sandbox: SandboxMode::WorkspaceWrite,
+            context_window: 128_000,
+            extra_args: Vec::new(),
+        };
+
+        let command = build_codex_command(&launch).unwrap();
+
+        assert_eq!(PathBuf::from(&command.argv[0]), executable);
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn resolves_cmd_executable_from_extensionless_name() {
+        let temp = tempfile::tempdir().unwrap();
+        let script = temp.path().join("codex.cmd");
+        fs::write(&script, "@exit /b 0\r\n").unwrap();
+
+        let resolved = resolve_codex_bin(&temp.path().join("codex").display().to_string()).unwrap();
+
+        assert_eq!(resolved, script);
+    }
 
     #[test]
     fn builds_relay_config_args() {

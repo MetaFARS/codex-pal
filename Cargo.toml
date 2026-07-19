@@ -1,6 +1,6 @@
 [package]
 name = "codex-pal"
-version = "0.1.4"
+version = "0.1.5"
 edition = "2024"
 description = "Launch Codex CLI through codex-relay for OpenAI-compatible model providers"
 license = "MIT"

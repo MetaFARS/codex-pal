@@ -147,12 +147,17 @@ pub fn print_relay_config(relay_bin: &str, provider: &ProviderProfile) -> Result
 }
 
 fn resolve_relay_bin(relay_bin: &str) -> Result<PathBuf> {
-    if Path::new(relay_bin).components().count() == 1
-        && let Ok(current_exe) = std::env::current_exe()
-        && let Some(sibling) = sibling_executable(&current_exe, relay_bin)
-        && sibling.is_file()
-    {
-        return Ok(sibling);
+    if Path::new(relay_bin).components().count() == 1 {
+        if let Ok(current_exe) = std::env::current_exe()
+            && let Some(sibling) = sibling_executable(&current_exe, relay_bin)
+            && sibling.is_file()
+        {
+            return Ok(sibling);
+        }
+        #[cfg(windows)]
+        if let Some(dependency) = pipx_dependency_executable(relay_bin) {
+            return Ok(dependency);
+        }
     }
 
     which::which(relay_bin).with_context(|| {
@@ -160,6 +165,45 @@ fn resolve_relay_bin(relay_bin: &str) -> Result<PathBuf> {
             "codex-relay binary {relay_bin:?} not found beside codex-pal or in PATH; install codex-relay or set --relay-bin"
         )
     })
+}
+
+#[cfg(windows)]
+fn pipx_dependency_executable(relay_bin: &str) -> Option<PathBuf> {
+    let home = pipx_home()?;
+    pipx_dependency_executable_in_home(&home, relay_bin)
+}
+
+#[cfg(windows)]
+fn pipx_dependency_executable_in_home(home: &Path, relay_bin: &str) -> Option<PathBuf> {
+    let venvs = home.join("venvs");
+    let mut environments = fs::read_dir(&venvs)
+        .ok()?
+        .filter_map(|entry| entry.ok().map(|entry| entry.path()))
+        .filter(|path| {
+            path.file_name()
+                .and_then(|name| name.to_str())
+                .is_some_and(|name| name.starts_with("codex-pal"))
+        })
+        .collect::<Vec<_>>();
+    environments.sort();
+    environments.into_iter().find_map(|environment| {
+        let bin_dir = environment.join("Scripts");
+        let candidate = sibling_executable(&bin_dir.join("codex-pal"), relay_bin)?;
+        candidate.is_file().then_some(candidate)
+    })
+}
+
+#[cfg(windows)]
+fn pipx_home() -> Option<PathBuf> {
+    if let Some(home) = std::env::var_os("PIPX_HOME") {
+        return Some(PathBuf::from(home));
+    }
+    let home = dirs::home_dir()?;
+    let legacy = [home.join(".local").join("pipx"), home.join("pipx")];
+    legacy
+        .into_iter()
+        .find(|path| path.exists())
+        .or_else(|| dirs::data_local_dir().map(|path| path.join("pipx")))
 }
 
 fn sibling_executable(current_exe: &Path, relay_bin: &str) -> Option<PathBuf> {
@@ -298,5 +342,19 @@ mod tests {
                     .join(format!("codex-relay{}", std::env::consts::EXE_SUFFIX))
             )
         );
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn locates_dependency_binary_in_copied_pipx_environment() {
+        let temp = tempfile::tempdir().unwrap();
+        let bin_dir = temp.path().join("venvs").join("codex-pal").join("Scripts");
+        fs::create_dir_all(&bin_dir).unwrap();
+        let relay = sibling_executable(&bin_dir.join("codex-pal"), "codex-relay").unwrap();
+        File::create(&relay).unwrap();
+
+        let found = pipx_dependency_executable_in_home(temp.path(), "codex-relay");
+
+        assert_eq!(found, Some(relay));
     }
 }

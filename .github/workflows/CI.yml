@@ -38,8 +38,21 @@ jobs:
       - name: Run tests
         run: cargo test --locked
 
+  windows-regressions:
+    runs-on: windows-latest
+    steps:
+      - uses: actions/checkout@v6
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - name: Cache cargo registry and build output
+        uses: Swatinem/rust-cache@v2
+      - name: Resolve the Codex cmd launcher
+        run: cargo test --locked codex::tests::resolves_cmd_executable_from_extensionless_name -- --exact
+      - name: Locate relay in the pipx environment
+        run: cargo test --locked relay::tests::locates_dependency_binary_in_copied_pipx_environment -- --exact
+
   build-wheels:
-    needs: rust-checks
+    needs: [rust-checks, windows-regressions]
     runs-on: ${{ matrix.platform.runner }}
     strategy:
       fail-fast: false
