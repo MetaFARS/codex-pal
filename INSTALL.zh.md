@@ -261,25 +261,27 @@ py -3.11 -m pip install --user --force-reinstall "pipx==1.15.2"
 
 ### 3. 安装 Codex CLI
 
-使用 OpenAI 官方 PowerShell 安装脚本：
+使用 npm 安装时，先安装 Node.js LTS，再安装并检查 Codex CLI：
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+npm install -g @openai/codex
+
+codex.cmd --version
+```
+
+如果 `winget` 执行完成后当前窗口还不能识别 `npm`，请关闭并重新打开 PowerShell，再从 `npm install` 继续执行。
+
+这里显式使用 `.cmd` 后缀是有意的：npm 在 Windows 上通过命令 shim `codex.cmd` 提供 Codex。通过 npm 安装后，请使用 `codex.cmd` 检查版本。`codex-pal` 会自动把默认命令 `codex` 解析为 `codex.cmd` 或 `codex.exe`，通常不需要额外配置。
+
+也可以使用 OpenAI 官方 PowerShell 安装脚本，并通过 `codex --version` 检查独立安装版本：
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
-```
-
-如果已经安装 Node.js 和 npm，也可以直接从 npm 安装 Codex CLI：
-
-```powershell
-npm install -g @openai/codex
-```
-
-检查安装：
-
-```powershell
 codex --version
 ```
 
-通过 npm 安装时，实际入口通常是 `codex.cmd`。`codex-pal` 在 Windows 上会自动把默认名称 `codex` 解析为 `codex.cmd` 或 `codex.exe`，通常不需要额外配置。可以使用以下命令查看实际入口：
+可以使用以下命令查看 PowerShell 实际选择的入口：
 
 ```powershell
 Get-Command codex -All

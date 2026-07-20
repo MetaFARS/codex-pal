@@ -261,25 +261,27 @@ Then retry the installation. This error comes from pipx scanning a shared comman
 
 ### 3. Install Codex CLI
 
-Use the official OpenAI PowerShell installation script:
+For the npm installation path, install Node.js LTS, then install and verify Codex CLI:
+
+```powershell
+winget install OpenJS.NodeJS.LTS
+npm install -g @openai/codex
+
+codex.cmd --version
+```
+
+If `npm` is not available after `winget` finishes, close and reopen PowerShell, then continue with the `npm install` command.
+
+The explicit `.cmd` suffix is intentional: npm exposes Codex through the Windows command shim `codex.cmd`. Use `codex.cmd` to verify this npm installation. `codex-pal` automatically resolves its default `codex` command to `codex.cmd` or `codex.exe`, so no additional configuration is normally required.
+
+Alternatively, use the official OpenAI PowerShell installation script and verify the standalone installation with `codex --version`:
 
 ```powershell
 powershell -ExecutionPolicy ByPass -c "irm https://chatgpt.com/codex/install.ps1 | iex"
-```
-
-If Node.js and npm are already installed, you can install Codex CLI directly from npm instead:
-
-```powershell
-npm install -g @openai/codex
-```
-
-Verify the installation:
-
-```powershell
 codex --version
 ```
 
-When installed through npm, the actual entry point is usually `codex.cmd`. On Windows, `codex-pal` automatically resolves the default name `codex` to `codex.cmd` or `codex.exe`, so no additional configuration is normally required. To see the actual entry point, run:
+To see the actual entry point selected by PowerShell, run:
 
 ```powershell
 Get-Command codex -All
